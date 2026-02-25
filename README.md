@@ -6,7 +6,7 @@ This project provides a Dockerized solution for running `marker-pdf` with `Ollam
 
 *   **Automated PDF Processing**: Monitors a specific input directory for PDF files.
 *   **Ollama Integration**: Leverages a local Ollama instance for enhanced OCR and conversion.
-*   **Serverless Optimized**: Uses a PyTorch base image optimized for RunPod.io.
+*   **Serverless Optimized**: Uses a PyTorch base image (official `pytorch/pytorch:2.2.0-cuda12.1-cudnn8-devel`) optimized for GPU workloads.
 *   **Configurable**: Highly customizable via environment variables.
 *   **Persistent Models**: Supports mounting a persistent volume for Ollama models to avoid re-downloading.
 
