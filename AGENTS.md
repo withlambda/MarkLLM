@@ -61,3 +61,10 @@ When the user issues the command `/execute-prompts`, the agent must:
 2.  Determine the optimal execution order based on dependencies (e.g., source code must exist before tests can be run).
 3.  Iterate through the ordered list of files (excluding `README.md`).
 4.  Perform the actions defined in `/exec-prompt` for each file.
+
+### `/review-code`
+When the user issues the command `/review-code`, the agent must:
+1.  Analyze all source code files in the project (e.g., `.py`, `.sh`, `Dockerfile`, `.yml`).
+2.  Identify potential bugs, security vulnerabilities, performance issues, and code quality improvements.
+3.  Apply fixes and improvements directly to the files, ensuring that the changes are well-documented and follow the project's coding standards.
+4.  Update `README.md` if any changes affect the usage or configuration of the project.
