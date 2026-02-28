@@ -1,12 +1,24 @@
-# Use the official PyTorch base image
-# This image includes CUDA 12.1, Python 3.10 (or similar), and PyTorch 2.2.0
-# We use the devel version to ensure we have necessary build tools if needed.
-FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-devel
+# 1. DEFINE BUILD ARGS BEFORE FROM
+# This allows the variable to be used in the image name
+ARG PYTORCH_VERSION=2.7.1
+ARG OLLAMA_LIB_VERSION
+ARG CUDA_VERSION=12.8
+ARG CUDNN_VERSION=9
 
-# Set environment variables to avoid interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
+# 2. BASE IMAGE
+FROM pytorch/pytorch:${PYTORCH_VERSION}-cuda${CUDA_VERSION}-cudnn${CUDNN_VERSION}-runtime
 
-# Install system dependencies required for marker-pdf and general utility
+# 3. DEFINE APP ARGS
+# Args defined before FROM are lost after FROM, so we define app args here
+ARG MARKER_VERSION=1.10.2
+ARG RUNPOD_VER=1.8.1
+
+# 4. ENVIRONMENT SETTINGS
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+	OLLAMA_HOST=0.0.0.0 \
+
+# 5. SYSTEM DEPENDENCIES
 # poppler-utils: Required for PDF processing
 # tesseract-ocr: Required for OCR capabilities
 # curl: Required for installing Ollama
@@ -18,22 +30,19 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama
-# We use the official install script.
+# 6. OLLAMA INSTALLATION
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
-# Install marker-pdf
-# Pinning to a specific version for reproducibility.
-# Adjust the version as needed based on compatibility with PyTorch 2.2.0.
-# As of late 2023/early 2024, marker-pdf is actively developed.
-# We install via pip.
-RUN pip install marker-pdf==0.2.10
+# 7. PYTHON DEPENDENCIES
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    marker-pdf==${MARKER_VERSION} \
+    runpod==${RUNPOD_VER}
 
-# Copy the entrypoint script into the container
-COPY entrypoint.sh /entrypoint.sh
+# 8. APPLICATION SETUP
+WORKDIR /app
+COPY handler.py entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 
-# Make the entrypoint script executable
-RUN chmod +x /entrypoint.sh
-
-# Set the entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+# 9. START COMMAND
+CMD [ "./entrypoint.sh" ]
