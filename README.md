@@ -1,20 +1,26 @@
-# Dockerized Marker-PDF with Ollama
+# Dockerized Marker-PDF with Ollama (RunPod Serverless)
 
-This project provides a Dockerized solution for running `marker-pdf` with `Ollama` LLM support in a single container. It is designed for deployment on serverless GPU platforms like RunPod.io, but can also be run locally.
+This project provides a Dockerized solution for running `marker-pdf` with `Ollama` LLM support as a **RunPod Serverless Worker**. It is designed to process PDF files on-demand, leveraging RunPod's GPU infrastructure.
+
+## Architecture
+
+The container runs a Python handler script that listens for jobs from the RunPod API. When a job is received, it:
+1.  Checks if the requested Ollama model is available (pulling it if necessary).
+2.  Processes the specified input file or directory using `marker-pdf`.
+3.  Returns the result (status, processed files, errors).
 
 ## Features
 
-*   **Automated PDF Processing**: Monitors a specific input directory for PDF files.
+*   **Serverless Worker**: Fully compatible with RunPod Serverless.
 *   **Ollama Integration**: Leverages a local Ollama instance for enhanced OCR and conversion.
-*   **Serverless Optimized**: Uses a PyTorch base image (official `pytorch/pytorch:2.2.0-cuda12.1-cudnn8-devel`) optimized for GPU workloads.
-*   **Configurable**: Highly customizable via environment variables.
-*   **Persistent Models**: Supports mounting a persistent volume for Ollama models to avoid re-downloading.
+*   **NVIDIA Optimized**: Uses the official `nvcr.io/nvidia/pytorch:25.04-py3` base image (PyTorch 2.7.0) for maximum GPU performance.
+*   **Persistent Models**: Supports mounting a persistent volume (e.g., network volume) for Ollama models to avoid re-downloading.
+*   **Configurable**: Job inputs can override default environment variables.
 
 ## Prerequisites
 
 *   Docker
-*   Docker Compose (optional, for local testing)
-*   NVIDIA GPU (recommended for performance)
+*   RunPod Account
 
 ## Installation
 
@@ -26,98 +32,63 @@ This project provides a Dockerized solution for running `marker-pdf` with `Ollam
 
 2.  Build the Docker image:
     ```bash
-    docker build -t marker-pdf-ollama .
+    docker build -t marker-pdf-serverless .
     ```
+
+3.  Push the image to a container registry (e.g., Docker Hub, GHCR).
 
 ## Usage
 
-### Local Testing
-
-1.  Create the necessary directories:
-    ```bash
-    mkdir -p test_data/input test_data/output ollama_models
-    ```
-
-2.  Place your PDF files in `test_data/input`.
-
-3.  Run the container using Docker Compose:
-    ```bash
-    docker-compose up
-    ```
-
-4.  Check the `test_data/output` directory for the generated Markdown files.
-
 ### RunPod Deployment
 
-To deploy on RunPod.io, you can use the following template configuration.
+1.  **Create a Template**: In RunPod, create a new Serverless Template.
+    *   **Image Name**: Your pushed image (e.g., `ghcr.io/your-username/marker-pdf-serverless:latest`).
+    *   **Container Disk Size**: 20GB (recommended).
+    *   **Environment Variables**: Set defaults (see below).
 
-**Environment Variables:**
+2.  **Create an Endpoint**: Create a new Serverless Endpoint using the template.
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `STORAGE_BUCKET_PATH` | The mount path of the storage bucket. | `/workspace` |
-| `INPUT_DIR` | Subdirectory for input PDFs. | `input` |
-| `OUTPUT_DIR` | Subdirectory for output Markdown. | `output` |
-| `OLLAMA_MODEL` | The LLM model to use (e.g., `llama3`). | `llama3` |
-| `OLLAMA_MODELS_DIR` | Directory for Ollama models. | `/root/.ollama/models` |
-| `MARKER_WORKERS` | Number of worker processes. | `2` |
-| `MARKER_PAGINATE_OUTPUT` | Whether to paginate output (true/false). | `false` |
-| `MARKER_USE_LLM` | Whether to use LLM (true/false). | `true` |
-| `MARKER_FORCE_OCR` | Whether to force OCR (true/false). | `false` |
+### Job Input Format
 
-**RunPod Template Configuration (JSON Snippet):**
+You can trigger the worker with a JSON payload. All fields are optional and will fall back to environment variables if not provided.
 
 ```json
 {
-  "name": "Marker-PDF with Ollama",
-  "imageName": "ghcr.io/your-username/dockerized-marker-pdf-with-ollama:latest",
-  "dockerArgs": "",
-  "containerDiskSizeGB": 20,
-  "volumeInGB": 0,
-  "env": [
-    {
-      "key": "STORAGE_BUCKET_PATH",
-      "value": "/workspace"
-    },
-    {
-      "key": "INPUT_DIR",
-      "value": "input"
-    },
-    {
-      "key": "OUTPUT_DIR",
-      "value": "output"
-    },
-    {
-      "key": "OLLAMA_MODEL",
-      "value": "llama3"
-    },
-    {
-      "key": "OLLAMA_MODELS_DIR",
-      "value": "/workspace/ollama_models"
-    },
-    {
-      "key": "MARKER_WORKERS",
-      "value": "4"
-    },
-    {
-      "key": "MARKER_PAGINATE_OUTPUT",
-      "value": "false"
-    },
-    {
-      "key": "MARKER_USE_LLM",
-      "value": "true"
-    },
-    {
-      "key": "MARKER_FORCE_OCR",
-      "value": "false"
-    }
-  ],
-  "ports": "8888/http",
-  "volumeMountPath": "/workspace"
+  "input": {
+    "storage_bucket_path": "/workspace",
+    "input_dir": "input/my_document.pdf", 
+    "output_dir": "output",
+    "ollama_model": "llama3",
+    "marker_workers": 4,
+    "marker_paginate_output": false,
+    "marker_use_llm": true,
+    "marker_force_ocr": false
+  }
 }
 ```
 
-**Note:** Ensure you have a volume mounted at `/workspace` (or your configured `STORAGE_BUCKET_PATH`) to persist data and models.
+*   `input_dir`: Can be a specific file path or a directory relative to `storage_bucket_path`.
+
+### Environment Variables
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `STORAGE_BUCKET_PATH` | Base path for storage. | `/workspace` |
+| `INPUT_DIR` | Default input directory. | `input` |
+| `OUTPUT_DIR` | Default output directory. | `output` |
+| `OLLAMA_MODEL` | Default LLM model. | `llama3` |
+| `OLLAMA_MODELS_DIR` | Directory for Ollama models. | `/root/.ollama/models` |
+| `MARKER_WORKERS` | Number of worker processes. | `2` |
+
+## Local Testing
+
+You can test the handler logic locally using the provided test scripts.
+
+1.  **Run the Test**:
+    The `run_test.sh` script sets up a local environment and runs the handler with a sample payload.
+    ```bash
+    ./run_test.sh
+    ```
 
 ## Contributing
 
