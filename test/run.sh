@@ -1,0 +1,123 @@
+#!/bin/bash
+
+# Script to run local tests for the Dockerized Marker-PDF solution (RunPod Serverless).
+
+
+# --- Configuration ---
+
+# set the roor dir to the build/test dir
+BUILD_TEST_DIR="../build/test"
+rm -rf "${BUILD_TEST_DIR}" && mkdir -p "${BUILD_TEST_DIR}"
+
+cp requirements.txt \
+  Dockerfile \
+  test-handler.py \
+  create-sample-pdfs.py \
+  .dockerignore \
+  ../handler.py "${BUILD_TEST_DIR}"
+cp -r ../entrypoint "${BUILD_TEST_DIR}"
+
+cd "${BUILD_TEST_DIR}" || exit 1
+
+pip install -r requirements.txt
+
+export TEST_INPUT_DIR="test-data/input"
+export TEST_OUTPUT_DIR="test-data/output"
+
+DOCKER_CONTAINER="marker-with-ollama-test"
+
+rm -rf $TEST_INPUT_DIR
+rm -rf $TEST_OUTPUT_DIR
+
+mkdir -p $TEST_INPUT_DIR
+mkdir -p $TEST_OUTPUT_DIR
+
+# --- 1. Check for Sample PDFs ---
+
+echo "Checking for sample PDFs in $TEST_INPUT_DIR..."
+
+if [ ! -d "$TEST_INPUT_DIR" ] || [ -z "$(ls -A "$TEST_INPUT_DIR")" ]; then
+    echo "Sample PDFs not found. Generating them..."
+    python3 create-sample-pdfs.py
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to generate sample PDFs."
+        exit 1
+    fi
+else
+    echo "Sample PDFs found."
+fi
+
+
+# --- 2. Build Docker Image ---
+
+echo "Building Docker image..."
+
+docker build -f Dockerfile -t  ${DOCKER_CONTAINER} .
+
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to build Docker image."
+    exit 1
+fi
+
+
+# --- 3. Run Container & Test Handler ---
+
+echo "Running container and executing test handler..."
+
+OLLAMA_MODEL="smollm:135m"
+
+docker run --rm \
+  --name marker-ollama-test \
+  --shm-size=2gb \
+  -e "VOLUME_ROOT_MOUNT_PATH=/v" \
+  -e "HANDLER_FILE_NAME=test-handler.py" \
+  -e "OLLAMA_MODEL=${OLLAMA_MODEL}" \
+  -e "TORCH_NUM_THREADS=1" \
+  -e "TORCH_DEVICE=cpu" \
+  -e "PYTORCH_ENABLE_MPS_FALLBACK=1" \
+  -e "OMP_NUM_THREADS=1" \
+  -e "MKL_NUM_THREADS=1" \
+  -e "OCR_ENGINE=none" \
+  -e "OLLAMA_BASE_URL=http://127.0.0.1:11434" \
+  -v "${HOME}/.ollama/:/v/.ollama/" \
+  -v "./${TEST_INPUT_DIR}:/v/input" \
+  -v "./${TEST_OUTPUT_DIR}:/v/output" \
+  -it \
+  ${DOCKER_CONTAINER}
+
+
+exit 0
+# We use 'up' to start the container. The entrypoint in docker-compose.test.yml
+# is overridden to run the entrypoint script (start Ollama) and then run the test script.
+# We use --abort-on-container-exit to stop if the test script exits.
+docker-compose -f "$DOCKER_COMPOSE_FILE" up --abort-on-container-exit
+
+EXIT_CODE=$?
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "Error: Container exited with non-zero status."
+    # Don't exit immediately, check output first.
+fi
+
+# --- 4. Verify Output ---
+
+echo "Verifying output in $TEST_OUTPUT_DIR..."
+
+# Check if output directory exists
+if [ ! -d "$TEST_OUTPUT_DIR" ]; then
+    echo "Error: Output directory not found."
+    exit 1
+fi
+
+# Check for Markdown files
+MD_FILES=$(find "$TEST_OUTPUT_DIR" -name "*.md")
+
+if [ -z "$MD_FILES" ]; then
+    echo "FAILURE: No Markdown files generated."
+    exit 1
+else
+    echo "SUCCESS: Markdown files generated:"
+    echo "$MD_FILES"
+fi
+
+echo "Test completed successfully."
+exit 0
