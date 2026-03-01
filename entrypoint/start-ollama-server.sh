@@ -23,6 +23,5 @@ until curl -s http://127.0.0.1:11434 > /dev/null; do
     echo "Waiting for Ollama... ($RETRY_COUNT/$MAX_RETRIES)"
     sleep 2
     RETRY_COUNT=$((RETRY_COUNT + 1))
-    echo "Retry count: $RETRY_COUNT"
 done
 echo "Ollama is up and running!"

@@ -85,9 +85,10 @@ You can trigger the worker with a JSON payload. All fields are optional and will
 You can test the handler logic locally using the provided test scripts.
 
 1.  **Run the Test**:
-    The `run_test.sh` script sets up a local environment and runs the handler with a sample payload.
+    The `test/run.sh` script sets up a local environment and runs the handler with a sample payload.
     ```bash
-    ./run_test.sh
+    cd test
+    ./run.sh
     ```
 
 ## Releasing

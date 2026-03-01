@@ -9,6 +9,4 @@ source base-validation-and-config.sh
 source start-ollama-server.sh
 source build-ollama-model.sh
 
-echo "here1"
-
 source run-handler.sh

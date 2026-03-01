@@ -84,17 +84,10 @@ docker run --rm \
   -e "OCR_ENGINE=none" \
   -e "OLLAMA_BASE_URL=http://127.0.0.1:11434" \
   -v "${HOME}/.ollama/:/v/.ollama/" \
-  -v "./${TEST_INPUT_DIR}:/v/input" \
-  -v "./${TEST_OUTPUT_DIR}:/v/output" \
+  -v "$(pwd)/${TEST_INPUT_DIR}:/v/input" \
+  -v "$(pwd)/${TEST_OUTPUT_DIR}:/v/output" \
   -it \
   ${DOCKER_CONTAINER}
-
-
-exit 0
-# We use 'up' to start the container. The entrypoint in docker-compose.test.yml
-# is overridden to run the entrypoint script (start Ollama) and then run the test script.
-# We use --abort-on-container-exit to stop if the test script exits.
-docker-compose -f "$DOCKER_COMPOSE_FILE" up --abort-on-container-exit
 
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then

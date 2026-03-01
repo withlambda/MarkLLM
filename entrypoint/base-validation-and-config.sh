@@ -36,7 +36,7 @@ fi
 
 # set handler file name, defaults to handler.py
 
-HANDLER_FILE_NAME="${HANDLER_FILE_NAME:-handler.py}"
+export HANDLER_FILE_NAME="${HANDLER_FILE_NAME:-handler.py}"
 
 # set permission for non-root user
 
