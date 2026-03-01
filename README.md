@@ -73,7 +73,7 @@ You can trigger the worker with a JSON payload. All fields are optional and will
 
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `STORAGE_BUCKET_PATH` | Base path for storage. | `/workspace` |
+| `VOLUME_ROOT_MOUNT_PATH` | Base path for storage. | `/workspace` |
 | `INPUT_DIR` | Default input directory. | `input` |
 | `OUTPUT_DIR` | Default output directory. | `output` |
 | `OLLAMA_MODEL` | Default LLM model. | `llama3` |
@@ -89,6 +89,21 @@ You can test the handler logic locally using the provided test scripts.
     ```bash
     ./run_test.sh
     ```
+
+## Releasing
+
+To release a new version of the project, use the `release.sh` script. This script updates the version in `VERSION` and `requirements.txt`, generates a changelog, commits the changes, creates a git tag, and pushes everything to the remote repository.
+
+```bash
+./release.sh <new_version>
+```
+
+Example:
+```bash
+./release.sh 1.10.3
+```
+
+This will trigger the GitHub Action to build and push the Docker image with the new version tag.
 
 ## Contributing
 
