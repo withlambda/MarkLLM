@@ -1,0 +1,26 @@
+# Generate entrypoint/run-handler.sh
+
+## Instruction
+Generate the file `entrypoint/run-handler.sh` with the exact content provided below.
+
+## Content
+```bash
+#!/bin/bash
+
+set -e
+
+# --- Run Handler ---
+
+echo "Starting RunPod Handler..."
+# Execute the Python handler script.
+# -u ensures unbuffered output so logs appear immediately.
+
+echo "$PWD"
+ls -ltrh
+
+exec gosu appuser python3 -u "${HANDLER_FILE_NAME}"
+
+# Note: The handler script calls runpod.serverless.start(), which blocks.
+# If the handler exits, the container should exit.
+
+```
