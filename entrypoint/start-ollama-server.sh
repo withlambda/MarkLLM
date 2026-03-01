@@ -5,7 +5,7 @@ set -e
 echo "Starting Ollama service..."
 # Start Ollama in the background. It will use OLLAMA_MODELS env var.
 # Redirect logs to prevent the background process from blocking the script output
-ollama serve > ollama.log 2>&1 &
+gosu appuser ollama serve > ollama.log 2>&1 &
 OLLAMA_PID=$!
 echo "OLLAMA PID: ${OLLAMA_PID}"
 
