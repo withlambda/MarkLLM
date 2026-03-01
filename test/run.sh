@@ -9,17 +9,17 @@
 BUILD_TEST_DIR="../build/test"
 rm -rf "${BUILD_TEST_DIR}" && mkdir -p "${BUILD_TEST_DIR}"
 
-cp requirements.txt \
-  Dockerfile \
-  test-handler.py \
-  create-sample-pdfs.py \
+cp ./*.txt \
+  ./*.py \
   .dockerignore \
+  ../Dockerfile \
+  ../requirements.txt \
   ../handler.py "${BUILD_TEST_DIR}"
 cp -r ../entrypoint "${BUILD_TEST_DIR}"
 
 cd "${BUILD_TEST_DIR}" || exit 1
 
-pip install -r requirements.txt
+pip install -r requirements-setup.txt
 
 export TEST_INPUT_DIR="test-data/input"
 export TEST_OUTPUT_DIR="test-data/output"
@@ -52,7 +52,11 @@ fi
 
 echo "Building Docker image..."
 
-docker build -f Dockerfile -t  ${DOCKER_CONTAINER} .
+docker build \
+  -f Dockerfile \
+  --build-arg STAGE="TEST" \
+  --build-arg BASE_IMAGE="python:3.12-slim" \
+  -t  ${DOCKER_CONTAINER} .
 
 if [ $? -ne 0 ]; then
     echo "Error: Failed to build Docker image."
