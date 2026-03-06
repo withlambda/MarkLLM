@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -e
+
+get_parent_dir() {
+  dirname -- "${1}"
+}
+
 hf_download() {
   hf download "${1}"
 }

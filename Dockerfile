@@ -18,6 +18,7 @@ ARG PYTORCH_VERSION=2.8.0
 ARG CUDA_VERSION=12.8
 ARG CUDNN_VERSION=9
 ARG OLLAMA_VERSION=0.17.4
+ARG DOWNLOAD_MARKER_MODELS="no"
 #ARG PYTHON_VERSION=3.11.13
 ARG BASE_IMAGE=pytorch/pytorch:${PYTORCH_VERSION}-cuda${CUDA_VERSION}-cudnn${CUDNN_VERSION}-runtime
 #ARG PYTHON_IMAGE=python:${PYTHON_VERSION}-slim
@@ -82,6 +83,8 @@ FROM ollama/ollama:${OLLAMA_VERSION} as ollama-source
 # 5. BASE IMAGE
 FROM ${BASE_IMAGE}
 
+ARG DOWNLOAD_MARKER_MODELS
+
 # 6. ENVIRONMENT SETTINGS
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -90,6 +93,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     XDG_CACHE_HOME=/app/cache \
     HF_HOME=/app/cache/huggingface \
     TORCH_HOME=/app/cache/torch
+
 
 # 7. Install Ollama
 COPY --from=ollama-source /usr/bin/ollama /usr/bin/ollama
