@@ -122,7 +122,9 @@ RUN mkdir -p ${XDG_CACHE_HOME} \
     gosu \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
-    && python3 -c "from marker.models import create_model_dict; create_model_dict()" \
+    if [ "${DOWNLOAD_MARKER_MODELS}" = "yes" ]; then \
+    	python3 -c "from marker.models import create_model_dict; create_model_dict()"; \
+    fi \
     && apt-get purge -y gcc python3-dev \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
