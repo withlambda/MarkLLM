@@ -21,6 +21,9 @@ set -e
 # Root path of network volume
 : "${VOLUME_ROOT_MOUNT_PATH:?The variable VOLUME_ROOT_MOUNT_PATH must be defined}"
 
+# Set the Hugging face home variable
+export HF_HOME="${HF_HOME:-"${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache"}"
+
 # Set default values for environment variables if not provided
 # These are defaults; the handler can override them via job input.
 export OLLAMA_MODELS_DIR=${OLLAMA_MODELS_DIR:-"/.ollama/models"}
@@ -42,9 +45,6 @@ if [ -z "${OLLAMA_MODEL}" ]; then
 
   #  Hugging face model quantization
   : "${HUGGING_FACE_MODEL_QUANTIZATION:?The variable HUGGING_FACE_MODEL_QUANTIZATION must be defined}"
-
-  # Hugging face cache dir relative to "${VOLUME_ROOT_MOUNT_PATH}", defaults to /huggingface-cache/hub
-  HUGGING_FACE_CACHE_DIR=${HUGGING_FACE_CACHE_DIR:-"/huggingface-cache/hub"}
 
 fi
 

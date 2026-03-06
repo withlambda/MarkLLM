@@ -26,7 +26,7 @@ fi
 
 # Construct the base path for the Hugging Face model cache
 # Replace '/' with '--' in the model name to match HF cache structure
-HF_MODEL_BASE_DIR_PATH="${VOLUME_ROOT_MOUNT_PATH}${HUGGING_FACE_CACHE_DIR}/models--${HUGGING_FACE_MODEL_NAME/\//--}"
+HF_MODEL_BASE_DIR_PATH="${HF_HOME}/hub/models--${HUGGING_FACE_MODEL_NAME/\//--}"
 
 # Check if the model directory exists
 if [ ! -d "$HF_MODEL_BASE_DIR_PATH" ]; then
