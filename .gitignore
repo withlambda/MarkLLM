@@ -16,3 +16,6 @@
 
 # models dir
 /models
+
+# s3 sync dir, for syncing files between local storage and network volume
+/s3-storage
