@@ -26,8 +26,8 @@ The container runs a Python handler script that listens for jobs from the RunPod
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/your-username/dockerized-marker-pdf-with-ollama.git
-    cd dockerized-marker-pdf-with-ollama
+    git clone https://github.com/your-username/marker-ollama-worker.git
+    cd marker-ollama-worker
     ```
 
 2.  Build the Docker image:
