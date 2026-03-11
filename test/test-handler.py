@@ -48,7 +48,6 @@ def test_handler():
             "output_dir": output_dir,
             "marker_workers": 1,
             "marker_paginate_output": True,
-            "marker_use_llm": False,
             "marker_force_ocr": False,
             "marker_disable_multiprocessing": True
         }

@@ -269,7 +269,6 @@ def handler(job):
         text_processor.is_parseable_as_int(marker_workers)
 
     marker_paginate_output = text_processor.to_bool(job_input.get('marker_paginate_output', "False"))
-    marker_use_llm = text_processor.to_bool(job_input.get('marker_use_llm', "False"))
     marker_force_ocr = text_processor.to_bool(job_input.get('marker_force_ocr', "False"))
     marker_disable_multiprocessing = text_processor.to_bool(job_input.get('marker_disable_multiprocessing', "False"))
     marker_block_correction_prompt = job_input.get("marker_block_correction_prompt", "")
@@ -326,7 +325,7 @@ def handler(job):
     if marker_debug:
         marker_args.append("--debug")
 
-    if marker_use_llm and use_postprocess_llm:
+    if use_postprocess_llm:
         marker_args.append("--use_llm")
         marker_args.append("--llm_service=marker.services.ollama.OllamaService")
         ollama_model = os.environ.get('OLLAMA_MODEL')
