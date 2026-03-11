@@ -30,7 +30,6 @@ The system should be configurable via **Environment Variables** (defaults) and *
 | Models Dir | `OLLAMA_MODELS_DIR` | N/A | Persistent storage for models (Env var only). |
 | Workers | `MARKER_WORKERS` | `marker_workers` | Number of workers. |
 | Paginate | `MARKER_PAGINATE_OUTPUT` | `marker_paginate_output` | Boolean. |
-| Use LLM | `MARKER_USE_LLM` | `marker_use_llm` | Boolean. |
 | Force OCR | `MARKER_FORCE_OCR` | `marker_force_ocr` | Boolean. |
 
 ## Implementation Details

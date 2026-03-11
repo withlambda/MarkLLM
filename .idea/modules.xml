@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/dockerized-marker-pdf-with-ollama.iml" filepath="$PROJECT_DIR$/.idea/dockerized-marker-pdf-with-ollama.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/marker-ollama-worker.iml" filepath="$PROJECT_DIR$/.idea/marker-ollama-worker.iml" />
     </modules>
   </component>
 </project>
