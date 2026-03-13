@@ -54,3 +54,9 @@ jobs:
             ARGS="--dry-run"
           fi
           ./release.sh $ARGS ${{ github.event.inputs.version }}
+
+  publish:
+    needs: release
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    uses: ./.github/workflows/docker-publish.yml
+    secrets: inherit

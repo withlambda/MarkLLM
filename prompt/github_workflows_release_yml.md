@@ -5,16 +5,21 @@ This GitHub Workflow automates the release process using the `release.sh` script
 
 ## Logic
 1.  **Trigger**:
-    *   `workflow_dispatch`: Manually triggered with an input parameter `version`.
-2.  **Permissions**:
-    *   Requires `contents: write` to push changes and tags.
-3.  **Steps**:
-    *   **Checkout**: Checks out the repository with full history (`fetch-depth: 0`) and authentication token.
-    *   **Git Configuration**: Sets up a bot user (e.g., `github-actions[bot]`).
-    *   **Run Script**: Executes `./release.sh` with the provided version.
-4.  **Security and Integration**:
+    *   `workflow_dispatch`: Manually triggered with input parameters `version` and `dry_run`.
+2.  **Jobs**:
+    *   **release**:
+        *   Requires `contents: write` permissions.
+        *   Checks out the repository with full history.
+        *   Configures git for the GitHub Actions bot.
+        *   Executes `./release.sh` with the provided version and `dry_run` flag if applicable.
+    *   **publish**:
+        *   Depends on the `release` job.
+        *   Runs only if `dry_run` is false.
+        *   Calls the Docker publish workflow (`.github/workflows/docker-publish.yml`).
+3.  **Security and Integration**:
     *   Uses `GITHUB_TOKEN` for repository operations.
-    *   **Note**: Tag pushes made with `GITHUB_TOKEN` do not trigger other workflows (like Docker publish) to prevent loops. For full automation, a Personal Access Token (PAT) with `repo` scope should be used instead.
+    *   The explicit call to the Docker publish workflow ensures the image is built even though `GITHUB_TOKEN` pushes don't trigger subsequent workflows by default.
 
 ## Inputs
 *   `version`: The target version for the new release (e.g., `1.10.3`).
+*   `dry_run`: Boolean flag to simulate the release process without making changes.

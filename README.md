@@ -469,20 +469,21 @@ An `.editorconfig` file is provided at the root of the project to ensure consist
 
 ## Releasing
 
-You can release a new version of the project either locally or via a GitHub Workflow.
+You can release a new version of the project either locally or via a GitHub Workflow. The process automates versioning, changelog generation, and Docker image publishing.
 
 ### Using GitHub Workflow (Recommended)
 
 1.  Navigate to the **Actions** tab in the GitHub repository.
 2.  Select the **Release** workflow from the sidebar.
 3.  Click **Run workflow**.
-4.  Enter the new version number (e.g., `1.10.3`) and click **Run workflow**.
+4.  Enter the new version number (e.g., `1.10.3`), optionally enable `dry_run`, and click **Run workflow**.
 
 This workflow will:
 - Update the version in `VERSION` and `requirements.txt`.
 - Generate a `CHANGELOG.md` entry from recent commits.
 - Commit the changes and create a git tag.
 - Push the changes and the tag to the repository.
+- **Trigger the Docker publish workflow** automatically as a subsequent step.
 
 ### Using local script (Alternative)
 
@@ -494,7 +495,7 @@ Alternatively, you can use the `release.sh` script locally:
 
 Example:
 ```bash
-./release.sh [-d|--dry-run] 1.10.3
+./release.sh 1.10.3
 ```
 
 The script performs the following:
@@ -505,18 +506,7 @@ The script performs the following:
 5.  **Generates** a `CHANGELOG.md` entry based on git commits since the last tag.
 6.  **Commits**, tags, and pushes to the current branch.
 
-### 2. GitHub Workflow (Recommended)
-
-Alternatively, you can use the **Release** GitHub Action:
-1.  Go to the **Actions** tab in your repository.
-2.  Select the **Release** workflow.
-3.  Click **Run workflow**.
-4.  Provide the `version` (e.g., `1.10.3`) and optionally enable `dry_run`.
-
-After the tag is pushed (by either method), the **Docker** GitHub Action will trigger to build and push the Docker image with the new version tag.
-
-> [!NOTE]
-> When using the GitHub Workflow, the automatic trigger of the Docker build may be skipped if using the default `GITHUB_TOKEN`. In such cases, you can manually trigger the **Docker** workflow or use a Personal Access Token (PAT) for the Release workflow.
+After the tag is pushed locally, the **Docker** GitHub Action will be triggered by the tag push event.
 
 ## Contributing
 
