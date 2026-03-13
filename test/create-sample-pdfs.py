@@ -17,7 +17,10 @@ import os
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
-def create_pdf(filename, text):
+def create_pdf(
+    filename: str,
+    text: str
+) -> None:
     """
     Creates a simple PDF file with the given text.
 
@@ -30,7 +33,7 @@ def create_pdf(filename, text):
     c.save()
     print(f"Created {filename}")
 
-def main():
+def main() -> None:
     """
     Main function to generate sample PDF files for testing.
 

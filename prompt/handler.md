@@ -10,46 +10,57 @@ This file serves as the main entry point for the RunPod Serverless worker. It pr
 #### `TextProcessor`
 A utility class for processing text inputs, primarily for parsing configuration values.
 
-*   `is_allowed_type_for_parsing(value)`: Checks if the value is a string, integer, or float. Raises `TypeError` otherwise.
-*   `to_bool(value)`: Converts a value (boolean, string, or number) to a boolean. Returns `True` for 'true', '1', 'yes', 'on', and `False` for 'false', '0', 'no', 'off', 'None', or empty string. Raises `ValueError` if not parsable.
-*   `is_parseable_as_int(value)`: Checks if a value can be parsed as an integer. Returns `True` or raises `ValueError`.
+*   `to_bool(value: Any) -> bool`:
+```python
+@staticmethod
+def to_bool(value: Any) -> bool:
+```
+Converts a value (boolean, string, or number) to a boolean. Returns `True` for 'true', '1', 'yes', 'on', and `False` for 'false', '0', 'no', 'off', 'None', or empty string. Raises `ValueError` if not parsable.
 
 ### Functions
-
-#### `check_and_pull_model(model_name)`
-Checks if the specified Ollama model exists locally. If not, it attempts to pull it from the registry.
-*   **Args**: `model_name` (str) - The name of the Ollama model.
-*   **Returns**: `bool` - `True` if successful.
-*   **Raises**: `RuntimeError` if the model cannot be found or pulled.
 
 #### `load_models()`
 Loads marker models into memory (VRAM) if not already loaded (Warm Start). It uses the global `ARTIFACT_DICT`.
 
-#### `check_is_dir(path)`
-Checks if the given path is a directory. Raises `NotADirectoryError` if not.
+```python
+def load_models() -> None:
+```
 
-#### `check_is_not_file(path)`
-Checks if the given path is not a file. Raises `ValueError` if it is.
+#### `calculate_optimal_workers(num_files: int, use_postprocess_llm: bool = True, marker_workers_override: Optional[int] = None) -> Tuple[int, int, int]`
+Calculates optimal worker counts for Marker and Ollama based on available VRAM and the number of files to process.
 
-#### `check_no_subdirs(path)`
-Checks if the directory at the given path contains any subdirectories (ignoring hidden ones). Raises `ValueError` if subdirectories exist.
+```python
+def calculate_optimal_workers(
+    num_files: int,
+    use_postprocess_llm: bool = True,
+    marker_workers_override: Optional[int] = None
+) -> Tuple[int, int, int]:
+```
+*   **Args**:
+    *   `num_files` (int): Number of files to process.
+    *   `use_postprocess_llm` (bool): Whether LLM post-processing will be used.
+    *   `marker_workers_override` (Optional[int]): Manual override for marker workers.
+*   **Returns**: `Tuple[int, int, int]` - (marker_workers, ollama_file_workers, ollama_chunk_workers).
 
-#### `is_empty_dir(path)`
-Checks if a directory is empty (ignoring hidden files). Returns `bool`.
-
-#### `check_is_empty_dir(path)`
-Checks if the directory at the given path is empty. Raises `ValueError` if not.
-
-#### `validate_document_formats(directory_path, allowed_file_extensions)`
-Validates that all files in the directory have allowed extensions. Raises `ValueError` if unsupported formats are found.
-
-#### `process_single_file(file_path, converter, output_base_path)`
+#### `process_single_file(file_path: Path, converter: PdfConverter, output_base_path: str) -> Tuple[bool, Path]`
 Processes a single file using the provided `marker` converter and saves the output (Markdown, JSON metadata, images) to a subfolder in the output directory.
 
-#### `handler(job)`
+```python
+def process_single_file(
+    file_path: Path,
+    converter: PdfConverter,
+    output_base_path: str
+) -> Tuple[bool, Path]:
+```
+
+#### `handler(job: Dict[str, Any]) -> Dict[str, str]`
 The main RunPod handler function.
-*   **Args**: `job` (dict) - The job payload containing `input` configuration.
-*   **Returns**: `dict` - Status and message.
+
+```python
+def handler(job: Dict[str, Any]) -> Dict[str, str]:
+```
+*   **Args**: `job` (Dict[str, Any]) - The job payload containing `input` configuration.
+*   **Returns**: `Dict[str, str]` - Status and message.
 *   **Environment Variables Used**:
     *   `VOLUME_ROOT_MOUNT_PATH` (Required): Base path for storage.
     *   `USE_POSTPROCESS_LLM` (Optional): Boolean to enable LLM.
@@ -75,9 +86,14 @@ The main RunPod handler function.
     *   Identifies valid files in `input_dir`.
     *   Uses `ThreadPoolExecutor` to process files in parallel based on `marker_workers`.
     *   Calls `process_single_file` for each file.
-6.  **Cleanup**:
+6.  **LLM Post-processing**:
+    *   If enabled, starts the Ollama server and ensures the model is available.
+    *   Processes each markdown file with `ollama_worker.process_file`.
+    *   Parallelizes file processing based on `ollama_file_workers`.
+7.  **Cleanup**:
+    *   Unloads the model and stops the Ollama server.
     *   Deletes processed input files to save space/indicate completion.
-7.  **Return**:
+8.  **Return**:
     *   Returns a success message with the status `completed`.
 
 ## Dependencies

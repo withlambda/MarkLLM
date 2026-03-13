@@ -1,0 +1,33 @@
+### In sync with .gitignore ###
+
+# IntelliJ ignored files
+.idea/shelf/
+.idea/workspace.xml
+.idea/httpRequests/
+.idea/dataSources/
+.idea/dataSources.local.xml
+
+# Build output
+/build
+
+# Private environment files
+**/*.private.env
+
+# Large/local data directories
+/models
+/s3-storage
+
+### Extra AI exclusions for less noise ###
+
+# Broader IDE metadata exclusion
+.idea/
+
+# Python cache / generated files
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# OS / temp / log files
+.DS_Store
+**/*.log
+**/*.tmp

@@ -24,12 +24,19 @@ get_parent_dir() {
   dirname -- "${1}"
 }
 
-# Wrapper for the `hf download` command.
+# Wrapper for the Hugging Face download CLI. Tries `hf` first, then `huggingface-cli`.
 #
 # Arguments:
 #   1. model_id (string): The ID of the Hugging Face model to download.
 hf_download() {
-  hf download "${1}"
+  if command -v hf >/dev/null 2>&1; then
+    hf download "${1}"
+  elif command -v huggingface-cli >/dev/null 2>&1; then
+    huggingface-cli download "${1}"
+  else
+    echo "Error: Neither 'hf' nor 'huggingface-cli' is installed or in PATH." >&2
+    return 127
+  fi
 }
 
 # Processes a file line by line, executing a specified command for each line.

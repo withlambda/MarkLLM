@@ -8,8 +8,18 @@ This script generates sample PDF files (`test1.pdf` and `test2.pdf`) for testing
 2.  **Environment Variables**:
     *   `TEST_INPUT_DIR`: (Required) The directory where the PDFs will be created.
 3.  **Functions**:
-    *   `create_pdf(filename, text)`: Creates a simple PDF with the given text.
-    *   `main()`:
+    *   `create_pdf(filename: str, text: str) -> None`:
+```python
+def create_pdf(
+    filename: str,
+    text: str
+) -> None:
+```
+Creates a simple PDF with the given text.
+    *   `main() -> None`:
+```python
+def main() -> None:
+```
         *   Retrieves `TEST_INPUT_DIR` from environment.
         *   Creates the directory if it doesn't exist.
         *   Calls `create_pdf` to generate two sample PDFs.

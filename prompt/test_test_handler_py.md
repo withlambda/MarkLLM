@@ -9,7 +9,10 @@ This script mocks the RunPod handler execution logic to test it locally without 
 2.  **Environment**:
     *   Assumes `handler.py` is in the same directory (or path accessible via `sys.path`).
 3.  **Functions**:
-    *   `test_handler()`:
+    *   `test_handler() -> None`:
+```python
+def test_handler() -> None:
+```
         *   Defines a sample job payload (dict) mimicking RunPod event structure.
         *   Calls `handler(job)` directly.
         *   Prints result.

@@ -23,14 +23,14 @@ sys.path.append("/")
 
 # Mock the runpod module to avoid starting the serverless loop
 import runpod
-runpod.serverless = type('obj', (object,), {'start': lambda x: print("Mock runpod.serverless.start called")})
+runpod.serverless = type('obj', (object,), {'start': lambda _: print("Mock runpod.serverless.start called")})
 
 from handler import handler
 
-def test_handler():
+def test_handler() -> None:
     """
     Simulates a RunPod job event and calls the handler.
-    
+
     This function sets up a mock job payload, invokes the main handler logic,
     and prints the result. It effectively tests the end-to-end processing pipeline
     without needing a live RunPod environment.
@@ -74,7 +74,7 @@ def test_handler():
         input_path=f"{storage_bucket_path}/{input_dir}"
 
         if result.get("status") == "completed" \
-                and result.get("message") == f"All input files of {input_path} processed.":
+            and result.get("message") == f"All input files of {input_path} processed.":
             print("\nSUCCESS: Handler completed successfully.")
 
         else:
