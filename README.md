@@ -122,7 +122,7 @@ You can trigger the worker with a JSON payload. `input_dir` and `output_dir` are
     "marker_disable_image_extraction": false,
     "marker_page_range": "0-10",
     "marker_processors": "marker.processors.images.ImageProcessor",
-    "marker_block_correction_prompt": "Optional custom prompt"
+    "ollama_block_correction_prompt": "Optional custom prompt"
   }
 }
 ```
@@ -145,7 +145,8 @@ You can trigger the worker with a JSON payload. `input_dir` and `output_dir` are
 
 #### LLM Post-Processing Parameters
 
-*   `marker_block_correction_prompt`: (Optional) A custom prompt string to use for block correction with the LLM.
+*   `ollama_block_correction_prompt`: (Optional) A custom prompt string to use for block correction with the LLM. Takes priority over `block_correction_prompt_key`.
+*   `block_correction_prompt_key`: (Optional) A key referencing a predefined prompt from the [Block Correction Prompt Catalog](#block-correction-prompt-catalog). Ignored if `ollama_block_correction_prompt` is provided.
 *   `ollama_chunk_workers`: (Optional) Number of text chunks to process in parallel during LLM phase. Overrides `OLLAMA_CHUNK_WORKERS` env var. Default: auto-calculated.
 
 #### Performance Tuning Examples
@@ -188,68 +189,126 @@ This processes multiple files in parallel through both Marker and Ollama phases.
 ```
 For GPUs with <16GB VRAM, disable parallelization to prevent OOM errors.
 
-#### Examples for `marker_block_correction_prompt`
+### Block Correction Prompt Catalog
 
-**1. 19th Century German (Fraktur/Gothic Script)**
+The worker includes a built-in catalog of specialized OCR correction prompts optimized for different document types and languages. Instead of providing a full custom prompt, you can reference a predefined prompt by its key.
 
-Use this prompt to correct OCR errors typical of 19th-century German texts printed in Fraktur, preserving historical orthography.
+**Prompt File Location:** [`block_correction_prompts.json`](block_correction_prompts.json)
 
+#### How to Use
+
+**Option 1: Use a Predefined Prompt (Recommended)**
+```json
+{
+  "input": {
+    "input_dir": "input/fraktur_book.pdf",
+    "output_dir": "output",
+    "block_correction_prompt_key": "fraktur_german_19c"
+  }
+}
+```
+
+**Option 2: Provide a Custom Prompt**
+```json
+{
+  "input": {
+    "input_dir": "input/document.pdf",
+    "output_dir": "output",
+    "ollama_block_correction_prompt": "Your custom prompt here..."
+  }
+}
+```
+
+**Priority:** If both `ollama_block_correction_prompt` and `block_correction_prompt_key` are provided, the custom prompt (`ollama_block_correction_prompt`) takes priority.
+
+#### Available Prompt Keys
+
+| Key | Name | Description |
+|:----|:-----|:------------|
+| `fraktur_german_19c` | 19th Century German (Fraktur/Gothic Script) | Historical German texts in Fraktur font with archaic orthography. Preserves 'th', 'y', 'c', long-s (ſ), and handles visual confusions. |
+| `english_handwriting` | English Handwriting (Modern Cursive) | Modern English cursive/script documents. Corrects connected letters, ambiguous letterforms, and stroke variations. |
+| `german_handwriting` | German Handwriting (Modern Cursive) | Modern German cursive/script, including Sütterlin influence. Handles umlauts, ß, and German ligatures. |
+| `french_handwriting` | French Handwriting (Modern Cursive) | Modern French cursive/script. Restores accents (é, è, ê, à, ç), handles elisions and French orthography. |
+| `spanish_handwriting` | Spanish Handwriting (Modern Cursive) | Modern Spanish cursive/script. Handles accents (á, é, í, ó, ú), ñ, and inverted punctuation (¿¡). |
+| `modern_english_general` | Modern English (General Purpose) | Standard modern English printed documents. Fixes common OCR errors and layout artifacts. |
+| `scientific_mathematical` | Scientific and Mathematical Texts | Documents with equations, formulas, and technical notation. Reconstructs mathematical expressions and LaTeX notation. |
+| `legal_documents` | Legal Documents (Formal Text) | Formal legal texts with precise terminology, enumeration, and structure. Preserves Latin legal terms. |
+| `historical_english` | Historical English (Pre-20th Century) | Historical English (16th-19th centuries) with archaic spelling, long-s (ſ), and period grammar. |
+| `asian_languages_cjk` | Asian Languages (Chinese, Japanese, Korean) | CJK character recognition with corrections for visually similar characters and mixed scripts. |
+
+#### Usage Examples
+
+**Example 1: 19th Century German Book**
+```json
+{
+  "input": {
+    "input_dir": "input/alte_deutsche_buecher/",
+    "output_dir": "output",
+    "block_correction_prompt_key": "fraktur_german_19c",
+    "marker_force_ocr": true
+  }
+}
+```
+
+**Example 2: French Handwritten Letters**
+```json
+{
+  "input": {
+    "input_dir": "input/lettres_manuscrites/",
+    "output_dir": "output",
+    "block_correction_prompt_key": "french_handwriting"
+  }
+}
+```
+
+**Example 3: Scientific Paper with Equations**
+```json
+{
+  "input": {
+    "input_dir": "input/research_paper.pdf",
+    "output_dir": "output",
+    "block_correction_prompt_key": "scientific_mathematical"
+  }
+}
+```
+
+**Example 4: Legal Contract**
+```json
+{
+  "input": {
+    "input_dir": "input/contract.pdf",
+    "output_dir": "output",
+    "block_correction_prompt_key": "legal_documents"
+  }
+}
+```
+
+#### Custom Prompts vs. Catalog
+
+- **Use Catalog Prompts** when your document matches one of the predefined scenarios. These prompts are carefully crafted and tested for specific use cases.
+- **Use Custom Prompts** when you need highly specialized correction rules not covered by the catalog, or when you want to experiment with different prompt strategies.
+- **Combine Approaches:** Start with a catalog prompt, test the results, then create a custom prompt if needed.
+
+#### Examples for Custom `ollama_block_correction_prompt`
+
+If the predefined catalog prompts don't meet your needs, you can provide a fully custom prompt. Here are some examples to inspire your own custom prompts:
+
+**Custom Prompt Template Structure:**
 ```text
-Role: You are an expert in 19th-century German philology and Fraktur typography (Gothic script). 
+Role: [Define the expert role/persona]
 
-Task: Correct the OCR errors in the following text while strictly adhering to historical orthography.
+Task: [Describe the correction task]
 
 Critical Correction Rules:
-1. Preserve Historical Spelling: Do NOT modernize the language to current German standards (Rechtschreibreform). 
-   - Keep 'th' in words like 'Thal', 'Thür', 'Rath', 'thun', 'Theil'.
-   - Keep 'y' in words like 'Seyn', 'bey', 'meyn'.
-   - Keep 'c' instead of 'k' where appropriate (e.g., 'Cultur', 'Cabinat').
-2. Fix Long-s (ſ) vs. f: OCR frequently misidentifies the long-s (ſ) as an 'f'. 
-   - Use linguistic context to restore the 'ſ' or 's'. 
-   - Remember: 'ſ' is used at the beginning or middle of syllables; 's' (round s) is used only at the end of syllables or words.
-3. Fix Ligatures and Digraphs: Correct misreadings of common Fraktur ligatures:
-   - 'ch', 'ck', 'tz', 'ſt', and 'ß' (ſz).
-4. Visual Confusion: Resolve common Fraktur-specific misidentifications:
-   - 'B' vs. 'V' (e.g., 'Bater' -> 'Vater')
-   - 'G' vs. 'S'
-   - 'k' vs. 't'
-5. Handling Hyphenation: Merge words that were split across line breaks by the OCR, but maintain the archaic hyphenation style if it was part of the word's original spelling.
-6. Output Formatting: Provide ONLY the corrected text in clean Markdown. Do not include introductory remarks, explanations, or metadata.
+1. [Rule 1]
+2. [Rule 2]
+3. [Rule 3]
+...
+
+Output Formatting: Provide ONLY the corrected text in clean Markdown.
 ```
 
-**2. Standard Modern English (General Purpose)**
-
-Use this prompt for cleaning up standard English documents, focusing on layout issues and common OCR artifacts.
-
-```text
-Role: You are an expert editor and proofreader.
-
-Task: Correct OCR errors and formatting issues in the provided text block.
-
-Rules:
-1. Fix common OCR character confusion (e.g., '1' vs 'l' vs 'I', 'rn' vs 'm').
-2. Remove hyphenation at line breaks and join the words correctly.
-3. Fix broken sentence structures caused by layout analysis errors.
-4. Do NOT rephrase or summarize the content. The goal is fidelity to the original source.
-5. Output ONLY the corrected text in Markdown format.
-```
-
-**3. Scientific/Mathematical Text Reconstruction**
-
-Use this prompt for documents heavy in mathematical notation or scientific terminology, where OCR often garbles equations.
-
-```text
-Role: You are a scientific editor specialized in LaTeX and mathematical notation.
-
-Task: Restore the following text block, paying special attention to mathematical formulas and scientific terminology.
-
-Rules:
-1. Correct misspelled scientific terms based on context.
-2. Convert garbled mathematical expressions into proper LaTeX syntax where possible (e.g., convert "x^2 + y^2 = z^2" if it appears as "x2 + y2 = z2").
-3. Ensure variable names and Greek letters are correctly identified (e.g., 'v' vs '\nu').
-4. Do NOT alter the scientific meaning or data.
-5. Output ONLY the corrected text.
-```
+**Note:** For most use cases, we recommend using the [Block Correction Prompt Catalog](#block-correction-prompt-catalog) instead of writing custom prompts. The catalog prompts are extensively tested and optimized for their respective scenarios.
 
 ### Environment Variables
 

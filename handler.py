@@ -51,6 +51,8 @@ VALID_OUTPUT_FORMATS: Set[str] = {"json", "markdown", "html", "chunks"}
 VRAM_RESERVE_GB: int = 4
 # Cache for marker models (surya, etc) to avoid reloading on every request
 ARTIFACT_DICT: Optional[Dict[str, Any]] = None
+# Block correction prompt library (loaded from JSON)
+BLOCK_CORRECTION_PROMPT_LIBRARY: Dict[str, str] = {}
 
 def load_models() -> None:
     """Loads marker models into memory if not already loaded."""
@@ -58,6 +60,35 @@ def load_models() -> None:
     if ARTIFACT_DICT is None:
         logger.info("Loading marker models into VRAM...")
         ARTIFACT_DICT = create_model_dict()
+
+def load_block_correction_prompts() -> None:
+    """Loads block correction prompt library from JSON file."""
+    global BLOCK_CORRECTION_PROMPT_LIBRARY
+    if BLOCK_CORRECTION_PROMPT_LIBRARY:
+        return  # Already loaded
+
+    prompt_file = Path(__file__).parent / "block_correction_prompts.json"
+
+    try:
+        if not prompt_file.exists():
+            logger.warning(f"Block correction prompt file not found: {prompt_file}")
+            return
+
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # Build dictionary: key -> prompt
+        for entry in data.get("prompts", []):
+            key = entry.get("key")
+            prompt = entry.get("prompt")
+            if key and prompt:
+                BLOCK_CORRECTION_PROMPT_LIBRARY[key] = prompt
+
+        logger.info(f"Loaded {len(BLOCK_CORRECTION_PROMPT_LIBRARY)} block correction prompts from catalog")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse block correction prompts JSON: {e}")
+    except Exception as e:
+        logger.error(f"Failed to load block correction prompts: {e}")
 
 def calculate_optimal_workers(
     num_files: int,
@@ -180,6 +211,8 @@ def handler(job: Dict[str, Any]) -> Dict[str, str]:
 
     # Ensure marker models are loaded (Warm Start)
     load_models()
+    # Load block correction prompt catalog
+    load_block_correction_prompts()
     global ARTIFACT_DICT
 
     # Load job input
@@ -207,7 +240,19 @@ def handler(job: Dict[str, Any]) -> Dict[str, str]:
     if marker_workers is not None:
         marker_workers = int(marker_workers)
 
-    marker_block_correction_prompt = job_input.get("marker_block_correction_prompt", "")
+    # Resolve block correction prompt (priority: direct prompt > prompt key > empty)
+    ollama_block_correction_prompt = job_input.get("ollama_block_correction_prompt", "")
+    if not ollama_block_correction_prompt:
+        # Try to lookup by key if direct prompt not provided
+        block_correction_prompt_key = job_input.get("block_correction_prompt_key", "")
+        if block_correction_prompt_key:
+            if block_correction_prompt_key in BLOCK_CORRECTION_PROMPT_LIBRARY:
+                ollama_block_correction_prompt = BLOCK_CORRECTION_PROMPT_LIBRARY[block_correction_prompt_key]
+                logger.info(f"Using block correction prompt from catalog: '{block_correction_prompt_key}'")
+            else:
+                logger.warning(f"Block correction prompt key '{block_correction_prompt_key}' not found in catalog. Available keys: {list(BLOCK_CORRECTION_PROMPT_LIBRARY.keys())}")
+    else:
+        logger.info("Using custom block correction prompt provided in job input")
 
     # Construct absolute paths
     if os.path.isabs(input_dir):
@@ -341,7 +386,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, str]:
             for md_file_path in processed_files:
                 ollama_worker.process_file(
                     md_file_path=md_file_path,
-                    prompt_template=marker_block_correction_prompt,
+                    prompt_template=ollama_block_correction_prompt,
                     max_chunk_workers=ollama_chunk_workers
                 )
 
