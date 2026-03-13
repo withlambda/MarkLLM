@@ -12,6 +12,24 @@ The container runs a Python handler script that listens for jobs from the RunPod
 3.  **Cleanup**: Deletes the input file upon successful processing (optional).
 4.  **Result**: Returns the result (status, processed files, errors).
 
+### Process Architecture
+
+When running `ps aux` inside the container, you may observe multiple processes:
+
+#### Python Processes
+There are typically two processes named `python3 -u handler.py`. This is standard behavior for the RunPod serverless environment and the `multiprocessing` library:
+*   **Supervisor/Manager**: One process acts as the supervisor, handling RunPod API communication and job distribution. It has a minimal memory footprint (approx. 500MB) as it does not load the heavy ML models.
+*   **Active Worker**: The other process is the active worker that performs the document conversion. This process loads the models into memory (e.g., ~23GB RSS) and handles the CPU/GPU intensive tasks.
+
+This dual-process architecture provides isolation; the supervisor remains responsive even if a worker process encounters a critical failure (like a segfault or Out-of-Memory error). Both processes share the same command name because they are initialized using the `spawn` start method, which is required for safe CUDA operations.
+
+#### Ollama Processes
+When LLM post-processing is enabled, you will see two `ollama` processes:
+*   **Ollama Server**: This is the main orchestrator (`ollama serve`) that manages model loading and provides the API.
+*   **Ollama Runner**: This is a child process spawned by the server to perform the actual inference. It typically has a larger memory footprint (RES) as it contains the model weights in VRAM (or RAM if falling back to CPU).
+
+**Note:** If you see an `ollama` process with extremely high CPU usage (e.g., > 1000%), it usually indicates that the model is running on the CPU instead of the GPU. This worker includes the necessary GPU runners to avoid this, but it may still happen if VRAM is insufficient.
+
 ## Features
 
 *   **Serverless Worker**: Fully compatible with RunPod Serverless.
@@ -20,6 +38,23 @@ The container runs a Python handler script that listens for jobs from the RunPod
 *   **Offline/Cached Models**: Can build Ollama models dynamically from a mounted Hugging Face cache, avoiding repeated network downloads.
 *   **NVIDIA Optimized**: Uses the official `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime` base image for maximum GPU performance.
 *   **Configurable**: Job inputs can override default environment variables.
+
+### VRAM Management
+
+The worker is designed to maximize GPU utilization while avoiding Out-of-Memory (OOM) errors. It follows a two-phase processing model:
+1.  **Marker Phase**: Documents are converted to the target format. Marker models (Surya, etc.) are loaded into VRAM.
+2.  **Ollama Phase**: If post-processing is enabled, Marker models are moved to CPU and the CUDA cache is cleared to provide Ollama with full access to the VRAM.
+
+This ensures that Ollama can load large LLMs into VRAM even if the Marker models previously consumed most of the available memory. For the next job, Marker models are moved back to GPU as needed.
+
+### Troubleshooting GPU Usage
+
+If you suspect Ollama is running on RAM (CPU) instead of VRAM (GPU), check the following:
+
+1.  **VRAM Logs**: Look for `VRAM Usage (After Marker)` in the worker logs. If `Free` memory is low (e.g., < 2GB) before Ollama starts, it may fallback to CPU. The current version of this worker automatically frees up VRAM before Ollama starts.
+2.  **Ollama Debugging**: Set the environment variable `OLLAMA_DEBUG=1`. This will log detailed information from the Ollama server to the container's standard output (and `ollama.log`), including which layers were loaded onto the GPU.
+3.  **Model Size**: Ensure your chosen model fits in the available VRAM. A 7B model usually requires ~5-8GB depending on quantization.
+4.  **GPU Visibility**: Check the `Environment Info` section at the start of the logs to verify that `CUDA_VISIBLE_DEVICES` is correctly set and `nvidia-smi` is accessible.
 
 ## Prerequisites
 

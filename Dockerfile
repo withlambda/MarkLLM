@@ -40,6 +40,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # 5. Install Ollama
 COPY --from=ollama-source /usr/bin/ollama /usr/bin/ollama
+COPY --from=ollama-source /usr/lib/ollama /usr/lib/ollama
 
 # 6. APPLICATION SETUP
 WORKDIR /app

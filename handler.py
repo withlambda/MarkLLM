@@ -26,6 +26,7 @@ import shutil
 import time
 import json
 import sys
+import torch
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Any, Dict, Tuple, Set
@@ -41,7 +42,8 @@ from utils import (
     check_no_subdirs,
     is_empty_dir,
     check_is_empty_dir,
-    TextProcessor
+    TextProcessor,
+    log_vram_usage
 )
 
 # Configure logging
@@ -69,6 +71,31 @@ def load_models() -> None:
     if ARTIFACT_DICT is None:
         logger.info("Loading marker models into VRAM...")
         ARTIFACT_DICT = create_model_dict()
+    else:
+        logger.info("Marker models already loaded. Ensuring they are on GPU...")
+        for key, value in ARTIFACT_DICT.items():
+            if hasattr(value, "to"):
+                try:
+                    value.to("cuda")
+                except Exception as e:
+                    logger.debug(f"Could not move model {key} to CUDA: {e}")
+        torch.cuda.empty_cache()
+
+def unload_marker_models() -> None:
+    """
+    Moves marker models to CPU and clears the CUDA cache to free up VRAM for Ollama.
+    The models are kept in ARTIFACT_DICT to allow for Warm Start.
+    """
+    global ARTIFACT_DICT
+    if ARTIFACT_DICT:
+        logger.info("Moving marker models to CPU to free VRAM for Ollama...")
+        for key, value in ARTIFACT_DICT.items():
+            if hasattr(value, "to"):
+                try:
+                    value.to("cpu")
+                except Exception as e:
+                    logger.debug(f"Could not move model {key} to CPU: {e}")
+        torch.cuda.empty_cache()
 
 def load_block_correction_prompts() -> None:
     """
@@ -247,6 +274,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
     # --- Configuration ---
     text_processor = TextProcessor()
+    log_vram_usage("Start")
 
     # --- 1. Ollama Model Setup (Pre-processing) ---
     use_postprocess_llm = text_processor.to_bool(os.environ.get('USE_POSTPROCESS_LLM'))
@@ -254,6 +282,8 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     if use_postprocess_llm:
         ollama_worker = OllamaWorker()
         ollama_worker.initialize_model()
+        torch.cuda.empty_cache()
+        log_vram_usage("After initialize_model")
 
     # --- 2. Marker Processing ---
 
@@ -400,6 +430,8 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
         end_time = time.time()
         logger.info(f"Marker execution took: {end_time - start_time:.2f} seconds")
+        torch.cuda.empty_cache()
+        log_vram_usage("After Marker")
 
     except Exception as e:
         logger.error(f"Unexpected error occurred during marker processing: {e}")
@@ -410,6 +442,10 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
     # --- 3. Ollama LLM Post-processing (Parallel) ---
     if use_postprocess_llm and processed_files:
+        # Move Marker models to CPU to give Ollama full access to VRAM
+        unload_marker_models()
+        log_vram_usage("Before starting Ollama server")
+
         logger.info("--- Starting Ollama for Post-processing ---")
         ollama_worker = None
         try:
@@ -435,6 +471,8 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             # Cleanup
             ollama_worker.unload_model()
             ollama_worker.stop_server()
+            torch.cuda.empty_cache()
+            log_vram_usage("Final")
 
         except Exception as e:
             logger.error(f"Error during Ollama post-processing phase: {e}")

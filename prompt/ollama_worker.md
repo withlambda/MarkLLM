@@ -16,7 +16,10 @@ The main class for interacting with Ollama.
     Initializes the Ollama client and process state. Configures the host from `OLLAMA_BASE_URL`.
 
 *   `start_server(self) -> None`:
-    Starts the Ollama server (`ollama serve`) in the background with `start_new_session=True`. Redirects output to `/var/log/ollama.log`. Waits for the server to be ready.
+    Starts the Ollama server (`ollama serve`) in the background with `start_new_session=True`. Redirects output to `ollama.log`. Logs environment and GPU information (via `_log_env_info`) before starting. Supports `OLLAMA_DEBUG=1` if set in environment. Waits for the server to be ready.
+
+*   `_log_env_info(self) -> None`:
+    Internal helper to log CUDA availability, GPU device name, VRAM, and relevant environment variables (`CUDA_VISIBLE_DEVICES`, `OLLAMA_MODELS`, etc.). Runs `nvidia-smi -L` to verify GPU status.
 
 *   `stop_server(self) -> None`:
     Stops the Ollama server and its entire process group using `os.killpg` and `signal.SIGTERM`. Falls back to `SIGKILL` if necessary. Ensures no zombie processes remain.
@@ -53,6 +56,9 @@ The main class for interacting with Ollama.
 
 *   `unload_model(self) -> None`:
     Unloads the model from VRAM by calling `client.generate` with `keep_alive=0`.
+
+*   `initialize_model(self) -> bool`:
+    High-level initialization method that starts the server, ensures the model is ready (pulls or builds), and then stops the server to free VRAM for Marker. Returns `True` on success.
 
 ## Logic
 *   **Process Group Termination**: Uses `start_new_session` and `os.killpg` to ensure that `ollama serve` and any of its child processes are completely terminated.

@@ -47,18 +47,29 @@ class OllamaWorker:
 
         logger.info("Starting Ollama service...")
 
+        # Log environment info for debugging
+        self._log_env_info()
+
         # Ensure OLLAMA_MODELS is set (usually handled by entrypoint scripts)
         if "OLLAMA_MODELS" not in os.environ:
              logger.warning("OLLAMA_MODELS environment variable not set.")
 
         self.log_file = open("ollama.log", "w")
         try:
+            # Prepare environment for ollama serve
+            env = os.environ.copy()
+            # Enable debug logging in ollama if requested
+            if os.environ.get("OLLAMA_DEBUG") == "1":
+                logger.info("Enabling OLLAMA_DEBUG=1")
+                env["OLLAMA_DEBUG"] = "1"
+
             # Start ollama serve
             self.process = subprocess.Popen(
                 ["ollama", "serve"],
                 stdout=self.log_file,
                 stderr=subprocess.STDOUT,
-                start_new_session=True
+                start_new_session=True,
+                env=env
             )
             logger.info(f"OLLAMA PID: {self.process.pid}")
             self._wait_for_ready()
@@ -66,6 +77,31 @@ class OllamaWorker:
             logger.error(f"Failed to start Ollama: {e}")
             self.stop_server()
             raise
+
+    def _log_env_info(self) -> None:
+        """Logs environment information relevant to GPU and Ollama."""
+        logger.info("--- Environment Info ---")
+        try:
+            import torch
+            if torch.cuda.is_available():
+                logger.info(f"Torch CUDA available: YES (Device: {torch.cuda.get_device_name(0)})")
+                logger.info(f"Torch CUDA memory: {torch.cuda.get_memory_info(0).total / 1024**3:.2f} GB total")
+            else:
+                logger.warning("Torch CUDA available: NO")
+        except ImportError:
+            logger.warning("Torch not available for GPU check.")
+
+        for var in ["CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "OLLAMA_MODELS", "OLLAMA_HOST"]:
+            if var in os.environ:
+                logger.info(f"{var}: {os.environ[var]}")
+
+        # Check if nvidia-smi is available
+        try:
+            res = subprocess.check_output(["nvidia-smi", "-L"], encoding="utf-8")
+            logger.info(f"Nvidia-SMI: {res.strip()}")
+        except Exception:
+            logger.warning("Nvidia-SMI not available.")
+        logger.info("------------------------")
 
     def stop_server(self) -> None:
         """Stops the Ollama server and its process group."""

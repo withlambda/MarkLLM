@@ -7,6 +7,15 @@ A utility module for file and directory validation. It provides helper functions
 
 ### Functions
 
+#### `log_vram_usage(label: str = "") -> None`
+Logs the current VRAM usage (Total, Used, Free) using `nvidia-smi`.
+
+```python
+def log_vram_usage(label: str = "") -> None:
+```
+*   **Args**: `label` (str) - An optional label for the log entry.
+*   **Behavior**: Logs information about VRAM to the configured logger. If `nvidia-smi` is not available, it logs a warning.
+
 #### `check_is_dir(path: str) -> None`
 Checks if the given path is a directory.
 
@@ -68,5 +77,5 @@ Converts a value (boolean, string, or number) to a boolean. Returns `True` for '
 These functions primarily rely on the `os` and `pathlib` modules to perform filesystem checks. They are designed to provide consistent error reporting for path-related validations.
 
 ## Dependencies
-*   `os`
+*   `os`, `subprocess`, `logging`
 *   `pathlib.Path`

@@ -14,8 +14,37 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+import subprocess
+import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Dict
+
+logger = logging.getLogger(__name__)
+
+def get_vram_info() -> Dict[str, Any]:
+    """
+    Attempts to get VRAM information using nvidia-smi.
+    Returns a dictionary with 'total', 'used', and 'free' in MB.
+    """
+    try:
+        res = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.total,memory.used,memory.free", "--format=csv,nounits,noheader"],
+            encoding="utf-8"
+        )
+        total, used, free = map(int, res.strip().split(","))
+        return {"total": total, "used": used, "free": free}
+    except Exception as e:
+        logger.debug(f"Could not get VRAM info: {e}")
+        return {}
+
+def log_vram_usage(label: str = "") -> None:
+    """Logs the current VRAM usage."""
+    info = get_vram_info()
+    if info:
+        logger.info(f"VRAM Usage {f'({label})' if label else ''}: "
+                    f"Total: {info['total']}MB, Used: {info['used']}MB, Free: {info['free']}MB")
+    else:
+        logger.info(f"VRAM Usage {f'({label})' if label else ''}: nvidia-smi not available.")
 
 def check_is_dir(path: str) -> None:
     """Checks if the given path is a directory. Raises NotADirectoryError if not."""
