@@ -54,6 +54,7 @@ def test_handler() -> None:
             "input_dir": input_dir, # Process the entire input directory
             "output_dir": output_dir,
             "marker_workers": 1,
+            "ollama_chunk_workers": 1,
             "marker_paginate_output": True,
             "marker_force_ocr": False,
             "marker_disable_multiprocessing": True
