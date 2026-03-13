@@ -68,7 +68,7 @@ RUN mkdir -p ${XDG_CACHE_HOME} \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY *.py entrypoint/ ./
+COPY *.py block_correction_prompts.json entrypoint/ ./
 
 # 7. Create Non-Root User
 # We create a user named 'appuser' with UID 1000

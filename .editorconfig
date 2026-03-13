@@ -1,0 +1,30 @@
+# .editorconfig
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.py]
+# Python specific settings (compatible with IntelliJ IDEA)
+ij_python_continuation_indent_size = 4
+ij_python_wrap_function_parameters = off
+ij_python_new_line_after_parameters_left_paren = true
+ij_python_place_right_paren_on_new_line = true
+ij_python_indent_declaration_parameters = true
+ij_python_use_continuation_indent_for_arguments = true
+ij_python_space_before_class_colon = false
+ij_python_space_before_def_colon = false
+ij_python_space_before_lambda_colon = false
+ij_python_space_between_def_and_params = false
+ij_python_space_within_method_parentheses = false
+
+[*.md]
+indent_size = 2
+max_line_length = off
+trim_trailing_whitespace = false

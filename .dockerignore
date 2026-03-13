@@ -1,4 +1,7 @@
 *
 !handler.py
+!ollama_worker.py
+!utils.py
+!block_correction_prompts.json
 !requirements.txt
 !entrypoint/

@@ -1,4 +1,9 @@
 #!/bin/bash
+# base-validation-and-config.sh - Validation and configuration of environment variables.
+#
+# This script defines default values for environment variables used by the worker,
+# performs sanity checks, and ensures required directories (like OLLAMA_MODELS) exist.
+#
 # Copyright (C) 2026 withLambda
 #
 # This program is free software: you can redistribute it and/or modify
@@ -55,11 +60,20 @@ export OLLAMA_MODELS_DIR="${OLLAMA_MODELS_DIR:-"/.ollama/models"}"
 
 # Set the OLLAMA_MODELS environment variable so Ollama knows where to store/find models.
 # This allows us to point to a mounted volume (e.g., from a storage bucket).
-export OLLAMA_MODELS="${VOLUME_ROOT_MOUNT_PATH}${OLLAMA_MODELS_DIR}"
+# Normalize path: Replace multiple slashes with a single slash
+export OLLAMA_MODELS="$(echo "${VOLUME_ROOT_MOUNT_PATH}/${OLLAMA_MODELS_DIR}" | sed 's#//*#/#g')"
 
 # Ensure the models directory exists.
 # If it's a mounted volume, this might already exist, but mkdir -p is safe.
 mkdir -p "$OLLAMA_MODELS"
+
+# Ensure the directory is owned by appuser if we're running as root
+if [ "$(id -u)" -eq 0 ]; then
+    # Check if appuser exists before chowning
+    if id "appuser" >/dev/null 2>&1; then
+        chown -R appuser:appgroup "$OLLAMA_MODELS"
+    fi
+fi
 
 # if OLLAMA_MODEL is not specified, then it is assumed
 # that the build should be performed from the hugging face model cache.

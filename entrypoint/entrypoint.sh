@@ -1,4 +1,9 @@
 #!/bin/bash
+# entrypoint.sh - Main entry point for the marker-ollama-worker Docker container.
+#
+# This script orchestrates the startup process, including environment validation
+# and launching the Python handler.
+#
 # Copyright (C) 2026 withLambda
 #
 # This program is free software: you can redistribute it and/or modify
@@ -20,11 +25,7 @@ set -e
 # Check that required environment variables are available
 source base-validation-and-config.sh
 
-if [ "${USE_POSTPROCESS_LLM}" = "true" ]; then
-
-  source start-ollama-server.sh
-  source build-ollama-model.sh
-
-fi
+# Note: Ollama startup and model building are now handled within the Python handler script.
+# We no longer need to source start-ollama-server.sh or build-ollama-model.sh here.
 
 source run-handler.sh
