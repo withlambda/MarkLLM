@@ -85,7 +85,20 @@ class OllamaWorker:
             import torch
             if torch.cuda.is_available():
                 logger.info(f"Torch CUDA available: YES (Device: {torch.cuda.get_device_name(0)})")
-                logger.info(f"Torch CUDA memory: {torch.cuda.get_memory_info(0).total / 1024**3:.2f} GB total")
+                try:
+                    # Get device properties for total memory
+                    props = torch.cuda.get_device_properties(0)
+                    total_gb = props.total_memory / 1024**3
+
+                    # Get free/total memory using mem_get_info if available (since 1.10)
+                    free_gb_info = ""
+                    if hasattr(torch.cuda, "mem_get_info"):
+                        free, total = torch.cuda.mem_get_info(0)
+                        free_gb_info = f", {free / 1024**3:.2f} GB free"
+
+                    logger.info(f"Torch CUDA memory: {total_gb:.2f} GB total{free_gb_info}")
+                except Exception as e:
+                    logger.warning(f"Could not retrieve detailed GPU memory info: {e}")
             else:
                 logger.warning("Torch CUDA available: NO")
         except ImportError:
