@@ -26,7 +26,8 @@ def _install_dependency_stubs() -> None:
         empty_cache=lambda: None,
         is_available=lambda: False,
         get_device_name=lambda *_args, **_kwargs: "stub-device",
-        get_memory_info=lambda *_args, **_kwargs: types.SimpleNamespace(total=0),
+        get_device_properties=lambda *_args, **_kwargs: types.SimpleNamespace(total_memory=0),
+        mem_get_info=lambda *_args, **_kwargs: (0, 0),
     )
     sys.modules.setdefault("torch", torch_module)
 
