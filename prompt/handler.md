@@ -10,6 +10,8 @@ This file serves as the main entry point for the RunPod Serverless worker. It pr
 *   `ALLOWED_INPUT_FILE_EXTENSIONS`: Set of supported extensions (`.pdf`, `.pptx`, `.docx`, `.xlsx`, `.html`, `.epub`).
 *   `VALID_OUTPUT_FORMATS`: Supported output formats (`json`, `markdown`, `html`, `chunks`).
 *   `VRAM_RESERVE_GB`: VRAM to reserve for overhead (Default: 4).
+*   `OLLAMA_VRAM_PER_TOKEN_FACTOR`: GB per token (Default: 0.00013).
+*   `OLLAMA_CONTEXT_LENGTH`: Context window length for LLM (Default: 4096).
 *   `ARTIFACT_DICT`: Global cache for marker models.
 *   `BLOCK_CORRECTION_PROMPT_LIBRARY`: Dictionary mapping prompt keys to actual prompt strings.
 
@@ -24,15 +26,27 @@ Moves marker models from the GPU to the CPU and clears the CUDA cache. This is u
 #### `load_block_correction_prompts()`
 Loads the prompt catalog from `block_correction_prompts.json` into `BLOCK_CORRECTION_PROMPT_LIBRARY`.
 
-#### `calculate_optimal_workers(num_files: int, use_postprocess_llm: bool, marker_workers_override: Optional[int] = None) -> Tuple[int, int]`
-Calculates optimal worker counts for Marker (`marker_workers`) and Ollama (`ollama_chunk_workers`) based on workload and available VRAM (`TOTAL_VRAM_GB`, `MARKER_VRAM_PER_WORKER`, `OLLAMA_VRAM_PER_WORKER`).
+#### `calculate_optimal_workers(num_files: int, use_postprocess_llm: bool, marker_workers_override: Optional[int] = None) -> Tuple[int, int, int]`
+Calculates optimal worker counts for Marker (`marker_workers`), Ollama thread count (`ollama_chunk_workers`), and Ollama parallelism (`ollama_num_parallel`) based on workload and available VRAM (`TOTAL_VRAM_GB`, `MARKER_VRAM_PER_WORKER`, `OLLAMA_BASE_VRAM_GB`, `OLLAMA_VRAM_FACTOR`, `OLLAMA_CONTEXT_LENGTH`).
+1.  **Marker Workers**: Scaled based on `num_files` and VRAM availability (capped at 4).
+2.  **Ollama Parallelism (`ollama_num_parallel`)**: Calculated using the context VRAM formula:
+    `parallel = floor((TOTAL_VRAM - VRAM_RESERVE - OLLAMA_BASE_VRAM) / (OLLAMA_VRAM_FACTOR * OLLAMA_CONTEXT_LENGTH))`
+3.  **Ollama Threads (`ollama_chunk_workers`)**: Set to a high fixed value (16) to saturate Ollama's internal request queue, maximizing GPU throughput.
+
+#### `_save_marker_output(out_folder: Path, file_stem: str, full_text: str, out_meta: Dict[str, Any], images: Dict[str, Any], output_format: str) -> Path`
+Saves the converted content (text, metadata, images) to the output folder.
+1.  Determines the file extension based on `output_format`.
+2.  Saves the extracted text to a file using `Path.write_text`.
+3.  Saves metadata as a JSON file.
+4.  Saves extracted images.
+5.  Returns the path to the main output file.
 
 #### `marker_process_single_file(file_path: Path, artifact_dict: Optional[Dict[str, Any]], marker_config: Dict[str, Any], output_base_path: str, output_format: str) -> Tuple[bool, Path]`
 Processes a single file using a freshly initialized `marker` converter (for thread safety).
 1.  Initializes `PdfConverter` with shared `artifact_dict` and task-specific `marker_config`.
 2.  Converts file to text and images.
 3.  Creates output subfolder named after the file.
-4.  Saves output file (format-specific extension), metadata JSON, and extracted images.
+4.  Calls `_save_marker_output` to save the results.
 5.  Returns a success flag and the path to the generated output file.
 
 #### `handler(job: Dict[str, Any]) -> Dict[str, str]`
@@ -40,7 +54,9 @@ Main RunPod entry point.
 1.  **Setup**: Initializes `TextProcessor`, logs initial VRAM state, loads marker models, and loads prompt catalog.
 2.  **Ollama Initialization**: Starts Ollama server to verify or build the model, then stops it and clears CUDA cache.
 3.  **Configuration**: Resolves paths and environment variables (`VOLUME_ROOT_MOUNT_PATH`, `USE_POSTPROCESS_LLM`, etc.).
-4.  **Input Parsing**: Reads job inputs (`input_dir`, `output_dir`, `output_format`, `marker_workers`, `ollama_chunk_workers`, `ollama_block_correction_prompt`, `block_correction_prompt_key`, `delete_input_on_success`).
+4.  **Input Parsing**:
+    *   Reads job inputs (`input_dir`, `output_dir`, `output_format`, `marker_workers`, `ollama_chunk_workers` override, `ollama_block_correction_prompt`, `block_correction_prompt_key`, `delete_input_on_success`).
+    *   **Ollama Configuration Extraction**: Extracts all `ollama_*` prefixed keys from the job input and maps them to `OllamaWorker` constructor arguments (e.g., `ollama_host` -> `host`, `ollama_model` -> `model`).
 5.  **Prompt Resolution**: Uses custom prompt or looks up by key in the catalog.
 6.  **Path Resolution**: Constructs absolute paths using `VOLUME_ROOT_MOUNT_PATH` if relative.
 7.  **Validation**: Validates directories and cleanup settings.
@@ -53,6 +69,7 @@ Main RunPod entry point.
 9.  **LLM Post-processing**:
     *   If enabled and `processed_files` is not empty:
         *   Moves Marker models to CPU to free VRAM.
+        *   Sets `OLLAMA_NUM_PARALLEL` in environment based on calculated value.
         *   Starts Ollama server and ensures model exists.
         *   Iterates through `processed_files` sequentially.
         *   Calls `ollama_worker.process_file` with chunk parallelism.

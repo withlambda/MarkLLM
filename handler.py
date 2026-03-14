@@ -19,6 +19,8 @@ Orchestrates the conversion of documents using the marker-pdf library and
 optional post-processing using an Ollama-powered LLM.
 """
 
+import atexit
+import gc
 import logging
 import runpod
 import os
@@ -27,10 +29,19 @@ import time
 import json
 import sys
 import torch
+import torch.multiprocessing as mp
 import re
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Any, Dict, Tuple, Set, List
+
+# Ensure threads don't contend - important for multiprocessing
+os.environ["MKL_DYNAMIC"] = "FALSE"
+os.environ["OMP_DYNAMIC"] = "FALSE"
+os.environ["OMP_NUM_THREADS"] = "2"  # Avoid OpenMP issues with multiprocessing
+os.environ["OPENBLAS_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # Transformers uses .isin for a simple op, which is not supported on MPS
+os.environ["IN_STREAMLIT"] = "true"  # Avoid multiprocessing inside surya
 
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
@@ -57,49 +68,54 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_INPUT_FILE_EXTENSIONS: Set[str] = {'.pdf', '.pptx', '.docx', '.xlsx', '.html', '.epub'}
 VALID_OUTPUT_FORMATS: Set[str] = {"json", "markdown", "html", "chunks"}
+FORMAT_EXTENSIONS: Dict[str, str] = {
+    "markdown": ".md",
+    "json": ".json",
+    "html": ".html",
+    "chunks": ".txt"
+}
+UTF8_ENCODING: str = "utf-8"
 IMAGE_FILE_EXTENSIONS: Set[str] = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 TEXT_OUTPUT_FILE_EXTENSIONS: Set[str] = {".md", ".txt"}
 IMAGE_DESCRIPTION_SECTION_HEADING: str = "## Extracted Image Descriptions"
 VRAM_RESERVE_GB: int = 4
-# Cache for marker models (surya, etc) to avoid reloading on every request
-ARTIFACT_DICT: Optional[Dict[str, Any]] = None
+OLLAMA_VRAM_PER_TOKEN_FACTOR: float = 0.00013
+OLLAMA_CONTEXT_LENGTH: int = int(os.environ.get("OLLAMA_CONTEXT_LENGTH", "4096"))
 # Block correction prompt library (loaded from JSON)
 BLOCK_CORRECTION_PROMPT_LIBRARY: Dict[str, str] = {}
 
-def load_models() -> None:
-    """
-    Loads marker models (surya, etc.) into VRAM if they are not already loaded.
-    Uses a global ARTIFACT_DICT to cache models for subsequent requests (Warm Start).
-    """
-    global ARTIFACT_DICT
-    if ARTIFACT_DICT is None:
-        logger.info("Loading marker models into VRAM...")
-        ARTIFACT_DICT = create_model_dict()
-    else:
-        logger.info("Marker models already loaded. Ensuring they are on GPU...")
-        for key, value in ARTIFACT_DICT.items():
-            if hasattr(value, "to"):
-                try:
-                    value.to("cuda")
-                except Exception as e:
-                    logger.debug(f"Could not move model {key} to CUDA: {e}")
-        torch.cuda.empty_cache()
+# Process-local marker models (each worker process has its own copy)
+_MARKER_MODELS: Optional[Dict[str, Any]] = None
 
-def unload_marker_models() -> None:
+
+def marker_worker_init() -> None:
     """
-    Moves marker models to CPU and clears the CUDA cache to free up VRAM for Ollama.
-    The models are kept in ARTIFACT_DICT to allow for Warm Start.
+    Initializes marker models for each worker process.
+    This function is called once per worker process when the pool is created.
+    Models are loaded into VRAM and stored in process-local _MARKER_MODELS variable.
     """
-    global ARTIFACT_DICT
-    if ARTIFACT_DICT:
-        logger.info("Moving marker models to CPU to free VRAM for Ollama...")
-        for key, value in ARTIFACT_DICT.items():
-            if hasattr(value, "to"):
-                try:
-                    value.to("cpu")
-                except Exception as e:
-                    logger.debug(f"Could not move model {key} to CPU: {e}")
-        torch.cuda.empty_cache()
+    global _MARKER_MODELS
+    logger.info(f"Worker process {os.getpid()} initializing marker models...")
+    _MARKER_MODELS = create_model_dict()
+
+    # Register cleanup on exit
+    atexit.register(marker_worker_exit)
+    logger.info(f"Worker process {os.getpid()} ready")
+
+
+def marker_worker_exit() -> None:
+    """
+    Cleanup function for worker processes.
+    Releases marker models and clears CUDA cache when a worker process exits.
+    """
+    global _MARKER_MODELS
+    try:
+        if _MARKER_MODELS:
+            del _MARKER_MODELS
+            torch.cuda.empty_cache()
+            gc.collect()
+    except Exception as e:
+        logger.debug(f"Error during worker cleanup: {e}")
 
 def load_block_correction_prompts() -> None:
     """
@@ -117,7 +133,7 @@ def load_block_correction_prompts() -> None:
             logger.warning(f"Block correction prompt file not found: {prompt_file}")
             return
 
-        with open(prompt_file, 'r', encoding='utf-8') as f:
+        with open(prompt_file, 'r', encoding='UTF8_ENCODING') as f:
             data = json.load(f)
 
         # Build dictionary: key -> prompt
@@ -137,7 +153,7 @@ def calculate_optimal_workers(
     num_files: int,
     use_postprocess_llm: bool,
     marker_workers_override: Optional[int] = None
-) -> Tuple[int, int]:
+) -> Tuple[int, int, int]:
     """
     Calculates optimal worker counts based on workload and available VRAM.
 
@@ -147,7 +163,7 @@ def calculate_optimal_workers(
         marker_workers_override (Optional[int]): Manual override for marker workers
 
     Returns:
-        tuple: (marker_workers, ollama_chunk_workers)
+        tuple: (marker_workers, ollama_chunk_workers, ollama_num_parallel)
     """
     # Get VRAM configuration
     total_vram = int(os.environ.get("TOTAL_VRAM_GB", "24"))
@@ -163,21 +179,38 @@ def calculate_optimal_workers(
     marker_workers = max(1, marker_workers)
 
     # Calculate ollama_chunk_workers hint
-    # Since we only parallelize at chunk level, we can be more aggressive
+    # We account for both the base model VRAM usage and per-worker context usage.
+    ollama_num_parallel = 1
     if not use_postprocess_llm:
         ollama_chunk_workers = 1
     else:
-        # Use environment variable or calculate based on VRAM
-        ollama_vram_per_worker = int(os.environ.get("OLLAMA_VRAM_PER_WORKER", "5"))
-        max_vram_workers = max(1, (total_vram - VRAM_RESERVE_GB) // ollama_vram_per_worker)
+        # Use environment variables or calculate based on VRAM
+        # Base reserve for the model weights themselves (default 8GB)
+        ollama_base_vram = int(os.environ.get("OLLAMA_BASE_VRAM_GB", "8"))
+        # VRAM factor (default 0.00013 GB per token)
+        ollama_vram_factor = float(os.environ.get("OLLAMA_VRAM_FACTOR") or OLLAMA_VRAM_PER_TOKEN_FACTOR)
 
-        # Cap at reasonable maximum
-        ollama_chunk_workers = min(max_vram_workers, 4)
+        # Calculate how many parallel contexts fit in remaining VRAM
+        # Note: marker models are on CPU during Ollama phase, so we don't subtract them
+        available_ollama_vram = total_vram - VRAM_RESERVE_GB - ollama_base_vram
+
+        context_vram_gb = ollama_vram_factor * OLLAMA_CONTEXT_LENGTH
+
+        if available_ollama_vram <= 0:
+            ollama_num_parallel = 1
+        else:
+            ollama_num_parallel = max(1, int(available_ollama_vram // context_vram_gb))
+
+        # ollama_chunk_workers (Python threads) should be decoupled and saturated
+        # We can set a higher default to ensure the Ollama queue is always full.
+        # Default to 16, but respect existing user overrides if they come later.
+        ollama_chunk_workers = 16
 
     logger.info(f"Calculated optimal workers for {num_files} files: "
-                f"marker={marker_workers}, ollama_chunk={ollama_chunk_workers}")
+                f"marker={marker_workers}, ollama_chunk_threads={ollama_chunk_workers}, "
+                f"ollama_num_parallel={ollama_num_parallel}")
 
-    return marker_workers, ollama_chunk_workers
+    return marker_workers, ollama_chunk_workers, ollama_num_parallel
 
 def list_extracted_images_for_output_file(output_file_path: Path) -> List[Path]:
     """
@@ -235,7 +268,7 @@ def insert_image_descriptions_to_text_file(
         logger.warning(f"Cannot insert image descriptions because output file is missing: {output_file_path}")
         return False
 
-    original_text = output_file_path.read_text(encoding="utf-8")
+    original_text = output_file_path.read_text(encoding=UTF8_ENCODING)
     modified_text = original_text
     unplaced_descriptions = []
 
@@ -277,24 +310,62 @@ def insert_image_descriptions_to_text_file(
         modified_text = f"{modified_text.rstrip()}\n\n{section_text}\n"
 
     if modified_text != original_text:
-        output_file_path.write_text(modified_text, encoding="utf-8")
+        output_file_path.write_text(modified_text, encoding=UTF8_ENCODING)
         return True
 
     return False
 
+def _save_marker_output(
+    out_folder: Path,
+    file_stem: str,
+    full_text: str,
+    out_meta: Dict[str, Any],
+    images: Dict[str, Any],
+    output_format: str
+) -> Path:
+    """
+    Saves the converted content (text, metadata, images) to the output folder.
+
+    Args:
+        out_folder (Path): The directory where output files will be saved.
+        file_stem (str): The filename without extension.
+        full_text (str): The extracted text from the document.
+        out_meta (Dict[str, Any]): Metadata from the conversion process.
+        images (Dict[str, Any]): Dictionary of image names and image objects.
+        output_format (str): The desired output format (e.g., 'markdown', 'json').
+
+    Returns:
+        Path: The path to the main output file.
+    """
+
+    extension = FORMAT_EXTENSIONS[output_format]
+    output_file = out_folder / f"{file_stem}{extension}"
+
+    # Save output in the specified format
+    output_file.write_text(full_text, encoding=UTF8_ENCODING)
+
+    # Save Metadata
+    meta_file = out_folder / f"{file_stem}_meta.json"
+    meta_file.write_text(json.dumps(out_meta, indent=4), encoding=UTF8_ENCODING)
+
+    # Save Images
+    for img_filename, img in images.items():
+        img.save(out_folder / img_filename)
+
+    return output_file
+
 def marker_process_single_file(
     file_path: Path,
-    artifact_dict: Optional[Dict[str, Any]],
     marker_config: Dict[str, Any],
     output_base_path: str,
     output_format: str
 ) -> Tuple[bool, Path]:
     """
     Processes a single file using the provided converter and saves the output.
+    Uses process-local marker models loaded during worker initialization.
 
     Args:
         file_path (Path): Path to the input file (e.g., .pdf, .docx).
-        artifact_dict (Optional[Dict[str, Any]]): Cached marker models.
         marker_config (Dict[str, Any]): Configuration for the marker converter.
         output_base_path (str): The root directory where output for this file will be saved.
         output_format (str): The desired output format (e.g., 'markdown', 'json').
@@ -302,48 +373,37 @@ def marker_process_single_file(
     Returns:
         Tuple[bool, Path]: A tuple containing (success_boolean, output_file_path).
     """
+    global _MARKER_MODELS
     try:
         logger.info(f"Converting {file_path.name}...")
 
-        # Initialize converter for each file (safer for multi-threading)
+        # Initialize converter using process-local models
         config_parser = ConfigParser(marker_config)
         converter = PdfConverter(
             config=config_parser.generate_config_dict(),
-            artifact_dict=artifact_dict,
+            artifact_dict=_MARKER_MODELS,
             processor_list=config_parser.get_processors(),
             renderer=config_parser.get_renderer(),
-            llm_service=None # No internal LLM service
+            llm_service=None  # No internal LLM service
         )
 
         rendered = converter(str(file_path))
         full_text, out_meta, images = text_from_rendered(rendered)
 
         # Create a subfolder for this file's output
-        fname = file_path.stem
-        out_folder = Path(output_base_path) / fname
+        file_stem = file_path.stem
+        out_folder = Path(output_base_path) / file_stem
         out_folder.mkdir(parents=True, exist_ok=True)
 
-        # Determine file extension based on output format
-        format_extensions = {
-            "markdown": ".md",
-            "json": ".json",
-            "html": ".html",
-            "chunks": ".txt"
-        }
-        extension = format_extensions.get(output_format, ".md")
-        output_file = out_folder / f"{fname}{extension}"
-
-        # Save output in the specified format
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(full_text)
-
-        # Save Metadata
-        with open(out_folder / f"{fname}_meta.json", "w", encoding="utf-8") as f:
-            json.dump(out_meta, f, indent=4)
-
-        # Save Images
-        for img_filename, img in images.items():
-            img.save(out_folder / img_filename)
+        # Save output files
+        output_file = _save_marker_output(
+            out_folder,
+            file_stem,
+            full_text,
+            out_meta,
+            images,
+            output_format
+        )
 
         logger.info(f"Finished {file_path.name}")
         return True, output_file
@@ -351,6 +411,40 @@ def marker_process_single_file(
         logger.error(f"Error processing {file_path.name}: {e}")
         # Raise to propagate the failure
         raise e
+
+def extract_ollama_config_from_job_input(job_input: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extracts the OllamaWorker-specific configuration from the given job input.
+
+    This function filters through a predefined list of configuration parameters
+    and extracts their corresponding values from the `job_input` dictionary. The
+    returned dictionary contains parameters relevant only to the configuration of
+    OllamaWorker.
+
+    :param job_input: The input dictionary contains various job parameters.
+        Expected to include keys with the prefix `ollama_` corresponding to
+        OllamaWorker-specific configuration parameters.
+    :type job_input: Dict[str, Any]
+    :return: A dictionary containing the extracted OllamaWorker-specific
+        configuration parameters.
+    :rtype: Dict[str, Any]
+    """
+    ollama_config_args = {}
+    # List of known configuration arguments for OllamaWorker
+    ollama_worker_params = [
+        "host", "model", "max_retries", "retry_delay", "context_length",
+        "flash_attention", "keep_alive", "log_dir", "debug",
+        "hf_model_name", "hf_model_quantization", "num_parallel",
+        "max_loaded_models", "kv_cache_type", "max_queue",
+        "chunk_size", "models_dir", "hf_home"
+    ]
+    for param in ollama_worker_params:
+        input_key = f"ollama_{param}"
+        if input_key in job_input:
+            ollama_config_args[param] = job_input[input_key]
+
+    return ollama_config_args
+
 
 def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -368,12 +462,31 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 - ollama_block_correction_prompt (str, optional): Custom prompt for LLM post-processing.
                 - block_correction_prompt_key (str, optional): Key for predefined prompt in catalog.
                 - ollama_chunk_workers (int, optional): Number of parallel workers for chunk processing.
+                - ollama_image_description_prompt (str, optional): Custom prompt for image description generation.
                 - marker_paginate_output (bool, optional): Default: False.
                 - marker_force_ocr (bool, optional): Default: False.
                 - marker_disable_multiprocessing (bool, optional): Default: False.
                 - marker_disable_image_extraction (bool, optional): Default: False.
                 - marker_page_range (str, optional): e.g. "0-10".
                 - marker_processors (str, optional): Comma-separated list of processor classes.
+                - ollama_host (str, optional): Ollama server host.
+                - ollama_model (str, optional): Ollama model name to use.
+                - ollama_max_retries (int, optional): Maximum retry attempts for Ollama requests.
+                - ollama_retry_delay (int, optional): Delay between retries in seconds.
+                - ollama_context_length (int, optional): Context length for Ollama model.
+                - ollama_flash_attention (bool, optional): Enable flash attention.
+                - ollama_keep_alive (str, optional): Keep-alive duration for Ollama model.
+                - ollama_log_dir (str, optional): Directory for Ollama logs.
+                - ollama_debug (bool, optional): Enable debug mode for Ollama.
+                - ollama_hf_model_name (str, optional): Hugging Face model name.
+                - ollama_hf_model_quantization (str, optional): Quantization level for HF model.
+                - ollama_num_parallel (int, optional): Number of parallel Ollama inference slots.
+                - ollama_max_loaded_models (int, optional): Maximum number of loaded models.
+                - ollama_kv_cache_type (str, optional): KV cache type.
+                - ollama_max_queue (int, optional): Maximum queue size.
+                - ollama_chunk_size (int, optional): Chunk size for text processing.
+                - ollama_models_dir (str, optional): Directory for Ollama models.
+                - ollama_hf_home (str, optional): Hugging Face home directory.
 
     Returns:
         Dict[str, Any]: A dictionary containing the status and results of the job.
@@ -383,24 +496,19 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     text_processor = TextProcessor()
     log_vram_usage("Start")
 
+    # Load job input
+    job_input = job.get("input", {})
+
+    ollama_config_args = extract_ollama_config_from_job_input(job_input)
+
     # --- 1. Ollama Model Setup (Pre-processing) ---
     use_postprocess_llm = text_processor.to_bool(os.environ.get('USE_POSTPROCESS_LLM'))
 
     if use_postprocess_llm:
-        ollama_worker = OllamaWorker()
+        ollama_worker = OllamaWorker(**ollama_config_args)
         ollama_worker.initialize_model()
         torch.cuda.empty_cache()
         log_vram_usage("After initialize_model")
-
-    # --- 2. Marker Processing ---
-
-    # Ensure marker models are loaded (Warm Start)
-    load_models()
-    # Load block correction prompt catalog
-    load_block_correction_prompts()
-
-    # Load job input
-    job_input = job.get("input", {})
 
     # Read environment variables
     storage_bucket_path = os.environ.get('VOLUME_ROOT_MOUNT_PATH')
@@ -499,7 +607,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "success", "message": "No supported files found to process."}
 
     # --- Calculate optimal worker counts ---
-    optimal_marker_workers, ollama_chunk_workers = calculate_optimal_workers(
+    optimal_marker_workers, ollama_chunk_workers, ollama_num_parallel = calculate_optimal_workers(
         num_files=len(files_to_process),
         use_postprocess_llm=use_postprocess_llm,
         marker_workers_override=marker_workers
@@ -509,7 +617,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     ollama_chunk_workers_override = job_input.get('ollama_chunk_workers')
     if ollama_chunk_workers_override is not None:
         ollama_chunk_workers = int(ollama_chunk_workers_override)
-        logger.info(f"Using job-level override for ollama_chunk_workers: {ollama_chunk_workers}")
+        logger.info(f"Using job-level override for ollama_chunk_workers (threads): {ollama_chunk_workers}")
 
     ollama_image_description_prompt = (
         job_input.get('ollama_image_description_prompt')
@@ -522,23 +630,34 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     processed_files = [] # Tuples of (original_path, output_file_path)
     successful_inputs = [] # Original paths of successfully processed files
 
+    # Set multiprocessing start method (required for CUDA)
     try:
-        with ThreadPoolExecutor(max_workers=optimal_marker_workers) as executor:
-            # Future mapping to file for error tracking if needed
-            future_to_file = {
-                executor.submit(marker_process_single_file, file_to_process, ARTIFACT_DICT, marker_config, output_path, output_format): file_to_process
-                for file_to_process in files_to_process
-            }
+        mp.set_start_method("spawn")
+    except RuntimeError:
+        # Already set, which is fine (happens if handler is called multiple times)
+        pass
 
-            for future in as_completed(future_to_file):
-                input_file = future_to_file[future]
-                try:
-                    success, output_file_path = future.result()
-                    if success:
-                        processed_files.append(output_file_path)
-                        successful_inputs.append(input_file)
-                except Exception as e:
-                    logger.error(f"File processing failed for {input_file.name}: {e}")
+    try:
+        # Prepare arguments for each file
+        task_args = [
+            (file_to_process, marker_config, output_path, output_format)
+            for file_to_process in files_to_process
+        ]
+
+        # Use multiprocessing Pool with worker initialization
+        with mp.Pool(
+            processes=optimal_marker_workers,
+            initializer=marker_worker_init,
+            maxtasksperchild=10  # Recycle workers periodically to free VRAM
+        ) as pool:
+            # Process files and collect results
+            results = pool.starmap(marker_process_single_file, task_args)
+
+            # Separate successful results from failed ones
+            for idx, (success, output_file_path) in enumerate(results):
+                if success:
+                    processed_files.append(output_file_path)
+                    successful_inputs.append(files_to_process[idx])
 
         end_time = time.time()
         logger.info(f"Marker execution took: {end_time - start_time:.2f} seconds")
@@ -554,16 +673,22 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
     # --- 3. Ollama LLM Post-processing (Parallel) ---
     if use_postprocess_llm and processed_files:
-        # Move Marker models to CPU to give Ollama full access to VRAM
-        unload_marker_models()
+        # Note: Marker worker processes have terminated, releasing their VRAM
+        # Ollama now has full access to VRAM
         log_vram_usage("Before starting Ollama server")
 
         logger.info("--- Starting Ollama for Post-processing ---")
+
+        # Set Ollama parallelism based on calculated values
+        if "OLLAMA_NUM_PARALLEL" not in os.environ:
+            os.environ["OLLAMA_NUM_PARALLEL"] = str(ollama_num_parallel)
+            logger.info(f"Setting OLLAMA_NUM_PARALLEL={ollama_num_parallel} based on VRAM/Context calculation")
+
         ollama_worker = None
         try:
             # Restart Ollama server
-            # We recreate the worker instance to be safe/clean state
-            ollama_worker = OllamaWorker()
+            # We recreate the worker instance with the same configuration
+            ollama_worker = OllamaWorker(**ollama_config_args)
             ollama_worker.start_server()
 
             # Note: Model should already be there from step 1, but ensure_model calls check_exists first

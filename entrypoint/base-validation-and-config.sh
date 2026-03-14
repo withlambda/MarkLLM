@@ -57,15 +57,18 @@ export HF_HOME="${HF_HOME:-"${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache"}"
 # Set default values for environment variables if not provided
 # These are defaults; the handler can override them via job input.
 export OLLAMA_MODELS_DIR="${OLLAMA_MODELS_DIR:-"/.ollama/models"}"
+export OLLAMA_LOGS_DIR="${OLLAMA_LOGS_DIR:-"/.ollama/logs"}"
 
 # Set the OLLAMA_MODELS environment variable so Ollama knows where to store/find models.
 # This allows us to point to a mounted volume (e.g., from a storage bucket).
 # Normalize path: Replace multiple slashes with a single slash
 export OLLAMA_MODELS="$(echo "${VOLUME_ROOT_MOUNT_PATH}/${OLLAMA_MODELS_DIR}" | sed 's#//*#/#g')"
+export OLLAMA_LOGS="$(echo "${VOLUME_ROOT_MOUNT_PATH}/${OLLAMA_LOGS_DIR}" | sed 's#//*#/#g')"
 
 # Ensure the required directories exist and are accessible by appuser.
 # If it's a mounted volume, these might already exist, but mkdir -p is safe.
 mkdir -p "$OLLAMA_MODELS"
+mkdir -p "$OLLAMA_LOGS"
 mkdir -p "$HF_HOME"
 
 # Ensure the directories are owned by appuser if we're running as root.
@@ -74,16 +77,20 @@ mkdir -p "$HF_HOME"
 if [ "$(id -u)" -eq 0 ]; then
     # Check if appuser exists before chowning
     if id "appuser" >/dev/null 2>&1; then
-        echo "Updating ownership of ${OLLAMA_MODELS} and ${HF_HOME} to appuser..."
+        echo "Updating ownership of ${OLLAMA_MODELS}, ${OLLAMA_LOGS} and ${HF_HOME} to appuser..."
         # Using --silent to avoid spamming logs if many files fail,
         # and || true to ensure the script continues.
-        chown -R --silent appuser:appgroup "$OLLAMA_MODELS" "$HF_HOME" || true
+        chown -R --silent appuser:appgroup "$OLLAMA_MODELS" "$OLLAMA_LOGS" "$HF_HOME" || true
 
         # As a fallback, try to make them writable by everyone if chown failed
         # but only if appuser still cannot write to them.
         if ! gosu appuser test -w "$OLLAMA_MODELS"; then
              echo "Warning: Could not change ownership of ${OLLAMA_MODELS}. Trying chmod as fallback..."
              chmod -R 777 "$OLLAMA_MODELS" 2>/dev/null || true
+        fi
+        if ! gosu appuser test -w "$OLLAMA_LOGS"; then
+             echo "Warning: Could not change ownership of ${OLLAMA_LOGS}. Trying chmod as fallback..."
+             chmod -R 777 "$OLLAMA_LOGS" 2>/dev/null || true
         fi
         if ! gosu appuser test -w "$HF_HOME"; then
              echo "Warning: Could not change ownership of ${HF_HOME}. Trying chmod as fallback..."
