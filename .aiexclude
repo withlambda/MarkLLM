@@ -31,3 +31,6 @@
 .DS_Store
 **/*.log
 **/*.tmp
+
+# python cache
+__pycache__/
