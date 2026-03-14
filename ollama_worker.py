@@ -5,7 +5,7 @@ import logging
 import signal
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, List, TextIO
+from typing import Optional, List, TextIO, Tuple
 import ollama
 
 # Configure logging
@@ -47,18 +47,29 @@ class OllamaWorker:
 
         logger.info("Starting Ollama service...")
 
+        # Log environment info for debugging
+        self._log_env_info()
+
         # Ensure OLLAMA_MODELS is set (usually handled by entrypoint scripts)
         if "OLLAMA_MODELS" not in os.environ:
              logger.warning("OLLAMA_MODELS environment variable not set.")
 
         self.log_file = open("ollama.log", "w")
         try:
+            # Prepare environment for ollama serve
+            env = os.environ.copy()
+            # Enable debug logging in ollama if requested
+            if os.environ.get("OLLAMA_DEBUG") == "1":
+                logger.info("Enabling OLLAMA_DEBUG=1")
+                env["OLLAMA_DEBUG"] = "1"
+
             # Start ollama serve
             self.process = subprocess.Popen(
                 ["ollama", "serve"],
                 stdout=self.log_file,
                 stderr=subprocess.STDOUT,
-                start_new_session=True
+                start_new_session=True,
+                env=env
             )
             logger.info(f"OLLAMA PID: {self.process.pid}")
             self._wait_for_ready()
@@ -66,6 +77,31 @@ class OllamaWorker:
             logger.error(f"Failed to start Ollama: {e}")
             self.stop_server()
             raise
+
+    def _log_env_info(self) -> None:
+        """Logs environment information relevant to GPU and Ollama."""
+        logger.info("--- Environment Info ---")
+        try:
+            import torch
+            if torch.cuda.is_available():
+                logger.info(f"Torch CUDA available: YES (Device: {torch.cuda.get_device_name(0)})")
+                logger.info(f"Torch CUDA memory: {torch.cuda.get_memory_info(0).total / 1024**3:.2f} GB total")
+            else:
+                logger.warning("Torch CUDA available: NO")
+        except ImportError:
+            logger.warning("Torch not available for GPU check.")
+
+        for var in ["CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES", "OLLAMA_MODELS", "OLLAMA_HOST"]:
+            if var in os.environ:
+                logger.info(f"{var}: {os.environ[var]}")
+
+        # Check if nvidia-smi is available
+        try:
+            res = subprocess.check_output(["nvidia-smi", "-L"], encoding="utf-8")
+            logger.info(f"Nvidia-SMI: {res.strip()}")
+        except Exception:
+            logger.warning("Nvidia-SMI not available.")
+        logger.info("------------------------")
 
     def stop_server(self) -> None:
         """Stops the Ollama server and its process group."""
@@ -310,18 +346,27 @@ class OllamaWorker:
                 stream=False
             )
 
-            # Handle response duality
-            if isinstance(response, dict):
-                result = response.get("response", "")
-            elif hasattr(response, 'response'):
-                result = response.response
-            else:
-                result = str(response)
-
-            return result
+            return self._extract_response_text(response)
         except Exception as e:
             logger.error(f"Exception processing chunk {chunk_index}: {e}")
             return chunk  # Fallback to original
+
+    @staticmethod
+    def _extract_response_text(response: object) -> str:
+        """
+        Normalizes Ollama SDK responses to a plain string.
+
+        Args:
+            response (object): Response object from `ollama.Client.generate`.
+
+        Returns:
+            str: Extracted response text.
+        """
+        if isinstance(response, dict):
+            return str(response.get("response", "")).strip()
+        if hasattr(response, "response"):
+            return str(response.response).strip()
+        return str(response).strip()
 
     def process_text(
         self,
@@ -424,6 +469,104 @@ class OllamaWorker:
         except Exception as e:
             logger.error(f"Failed to post-process {file_path.name}: {e}")
             return False
+
+    def _describe_single_image(
+        self,
+        image_path: Path,
+        prompt_template: Optional[str],
+        image_index: int
+    ) -> Optional[str]:
+        """
+        Generates a description for a single image using the Ollama model.
+
+        Args:
+            image_path (Path): Path to the image.
+            prompt_template (Optional[str]): Optional custom prompt for image description.
+            image_index (int): Zero-based image index for logging.
+
+        Returns:
+            Optional[str]: Description text, or None when generation fails.
+        """
+        model = os.environ.get("OLLAMA_MODEL")
+        if not model:
+            raise ValueError("OLLAMA_MODEL not set for image description")
+
+        system_prompt = prompt_template if prompt_template else (
+            "You are an expert document-vision assistant. "
+            "Describe the provided image precisely and factually. "
+            "Include visible text, tables, charts, figures, equations, and layout details when present. "
+            "Do not infer details that are not visible."
+        )
+
+        try:
+            response = self.client.generate(
+                model=model,
+                prompt="Provide a precise and concise description of this image.",
+                system=system_prompt,
+                images=[str(image_path)],
+                stream=False
+            )
+            description = self._extract_response_text(response)
+            if not description:
+                logger.warning(f"Empty image description returned for {image_path.name}")
+                return None
+            return description
+        except Exception as e:
+            logger.error(f"Failed to describe image {image_index + 1} ({image_path.name}): {e}")
+            return None
+
+    def describe_images(
+        self,
+        image_paths: List[Path],
+        prompt_template: Optional[str],
+        max_image_workers: int,
+    ) -> List[Tuple[Path, str]]:
+        """
+        Generates descriptions for multiple images.
+
+        Args:
+            image_paths (List[Path]): Paths of images to describe.
+            prompt_template (Optional[str]): Optional custom image description prompt.
+            max_image_workers (int): Maximum number of parallel workers.
+
+        Returns:
+            List[Tuple[Path, str]]: Successfully described image/path tuples in original order.
+        """
+        if not image_paths:
+            return []
+
+        max_workers = max(1, int(max_image_workers))
+        logger.info(f"Describing {len(image_paths)} extracted images with {max_workers} worker(s)...")
+
+        descriptions: List[Optional[str]] = [None] * len(image_paths)
+
+        if max_workers == 1 or len(image_paths) == 1:
+            for i, image_path in enumerate(image_paths):
+                descriptions[i] = self._describe_single_image(
+                    image_path=image_path,
+                    prompt_template=prompt_template,
+                    image_index=i
+                )
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_index = {
+                    executor.submit(self._describe_single_image, image_path, prompt_template, i): i
+                    for i, image_path in enumerate(image_paths)
+                }
+
+                for future in as_completed(future_to_index):
+                    idx = future_to_index[future]
+                    try:
+                        descriptions[idx] = future.result()
+                    except Exception as e:
+                        logger.error(f"Exception collecting image description {idx + 1}: {e}")
+                        descriptions[idx] = None
+
+        return [
+            (image_path, description)
+            for image_path, description in zip(image_paths, descriptions)
+            if description
+        ]
 
     @staticmethod
     def _chunk_text(

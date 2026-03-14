@@ -12,6 +12,24 @@ The container runs a Python handler script that listens for jobs from the RunPod
 3.  **Cleanup**: Deletes the input file upon successful processing (optional).
 4.  **Result**: Returns the result (status, processed files, errors).
 
+### Process Architecture
+
+When running `ps aux` inside the container, you may observe multiple processes:
+
+#### Python Processes
+There are typically two processes named `python3 -u handler.py`. This is standard behavior for the RunPod serverless environment and the `multiprocessing` library:
+*   **Supervisor/Manager**: One process acts as the supervisor, handling RunPod API communication and job distribution. It has a minimal memory footprint (approx. 500MB) as it does not load the heavy ML models.
+*   **Active Worker**: The other process is the active worker that performs the document conversion. This process loads the models into memory (e.g., ~23GB RSS) and handles the CPU/GPU intensive tasks.
+
+This dual-process architecture provides isolation; the supervisor remains responsive even if a worker process encounters a critical failure (like a segfault or Out-of-Memory error). Both processes share the same command name because they are initialized using the `spawn` start method, which is required for safe CUDA operations.
+
+#### Ollama Processes
+When LLM post-processing is enabled, you will see two `ollama` processes:
+*   **Ollama Server**: This is the main orchestrator (`ollama serve`) that manages model loading and provides the API.
+*   **Ollama Runner**: This is a child process spawned by the server to perform the actual inference. It typically has a larger memory footprint (RES) as it contains the model weights in VRAM (or RAM if falling back to CPU).
+
+**Note:** If you see an `ollama` process with extremely high CPU usage (e.g., > 1000%), it usually indicates that the model is running on the CPU instead of the GPU. This worker includes the necessary GPU runners to avoid this, but it may still happen if VRAM is insufficient.
+
 ## Features
 
 *   **Serverless Worker**: Fully compatible with RunPod Serverless.
@@ -20,6 +38,23 @@ The container runs a Python handler script that listens for jobs from the RunPod
 *   **Offline/Cached Models**: Can build Ollama models dynamically from a mounted Hugging Face cache, avoiding repeated network downloads.
 *   **NVIDIA Optimized**: Uses the official `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime` base image for maximum GPU performance.
 *   **Configurable**: Job inputs can override default environment variables.
+
+### VRAM Management
+
+The worker is designed to maximize GPU utilization while avoiding Out-of-Memory (OOM) errors. It follows a two-phase processing model:
+1.  **Marker Phase**: Documents are converted to the target format. Marker models (Surya, etc.) are loaded into VRAM.
+2.  **Ollama Phase**: If post-processing is enabled, Marker models are moved to CPU and the CUDA cache is cleared to provide Ollama with full access to the VRAM.
+
+This ensures that Ollama can load large LLMs into VRAM even if the Marker models previously consumed most of the available memory. For the next job, Marker models are moved back to GPU as needed.
+
+### Troubleshooting GPU Usage
+
+If you suspect Ollama is running on RAM (CPU) instead of VRAM (GPU), check the following:
+
+1.  **VRAM Logs**: Look for `VRAM Usage (After Marker)` in the worker logs. If `Free` memory is low (e.g., < 2GB) before Ollama starts, it may fallback to CPU. The current version of this worker automatically frees up VRAM before Ollama starts.
+2.  **Ollama Debugging**: Set the environment variable `OLLAMA_DEBUG=1`. This will log detailed information from the Ollama server to the container's standard output (and `ollama.log`), including which layers were loaded onto the GPU.
+3.  **Model Size**: Ensure your chosen model fits in the available VRAM. A 7B model usually requires ~5-8GB depending on quantization.
+4.  **GPU Visibility**: Check the `Environment Info` section at the start of the logs to verify that `CUDA_VISIBLE_DEVICES` is correctly set and `nvidia-smi` is accessible.
 
 ## Prerequisites
 
@@ -124,7 +159,8 @@ You can trigger the worker with a JSON payload. `input_dir` and `output_dir` are
     "marker_processors": "marker.processors.images.ImageProcessor",
     "delete_input_on_success": false,
     "ollama_block_correction_prompt": "Optional custom prompt",
-    "ollama_chunk_workers": 2
+    "ollama_chunk_workers": 2,
+    "ollama_image_description_prompt": "Optional custom prompt for image descriptions"
   }
 }
 ```
@@ -150,7 +186,10 @@ You can trigger the worker with a JSON payload. `input_dir` and `output_dir` are
 
 *   `ollama_block_correction_prompt`: (Optional) A custom prompt string to use for block correction with the LLM. Takes priority over `block_correction_prompt_key`.
 *   `block_correction_prompt_key`: (Optional) A key referencing a predefined prompt from the [Block Correction Prompt Catalog](#block-correction-prompt-catalog). Ignored if `ollama_block_correction_prompt` is provided.
-*   `ollama_chunk_workers`: (Optional) Number of text chunks to process in parallel during LLM phase. Default: auto-calculated.
+*   `ollama_chunk_workers`: (Optional) Number of parallel workers for chunk processing and image description generation. Default: auto-calculated.
+*   `ollama_image_description_prompt`: (Optional) Custom prompt for extracted image descriptions. If omitted, a built-in factual vision prompt is used.
+
+When marker image extraction is enabled, the LLM post-processing phase also describes each extracted image and inserts the descriptions directly into text outputs (`.md`/`.txt`), ideally placed immediately following their corresponding image tags. To ensure clarity for LLMs like NotebookLM or AnythingLM, these descriptions are wrapped in explicit `[BEGIN IMAGE DESCRIPTION]` and `[END IMAGE DESCRIPTION]` markers. If a matching tag cannot be found, the descriptions are appended as a fallback section at the end of the file. Non-text outputs are left unchanged.
 
 #### Performance Tuning Examples
 
@@ -322,6 +361,7 @@ Output Formatting: Provide ONLY the corrected text in clean Markdown.
 | `OLLAMA_MODEL`                           | Name of the Ollama model to use/pull.                 | (Optional)                                       |
 | `OLLAMA_HUGGING_FACE_MODEL_NAME`         | HF Model ID to build from (if `OLLAMA_MODEL` unset).  | (Required if `OLLAMA_MODEL` unset & LLM enabled) |
 | `OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION` | Quantization string to match GGUF file.               | (Required if `OLLAMA_MODEL` unset & LLM enabled) |
+| `OLLAMA_IMAGE_DESCRIPTION_PROMPT`        | Default prompt template for extracted image descriptions. | (Optional)                                   |
 | `HF_HOME`                                | Path to Hugging Face cache.                           | `${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache`    |
 | `OLLAMA_MODELS_DIR`                      | Directory for Ollama models (relative to root mount). | `/.ollama/models`                                |
 | `MARKER_DEBUG`                           | Enable debug mode.                                    | `False`                                          |
@@ -406,6 +446,7 @@ The following variables can also be set to further customize the environment, th
 | **Python**       | `PYTHONUNBUFFERED`            | Force unbuffered stdout/stderr.              | `1`                      |
 | **Hugging Face** | `HF_HUB_OFFLINE`              | Run Hugging Face Hub in offline mode.        | `1`                      |
 | **Ollama**       | `OLLAMA_BASE_URL`             | Base URL for Ollama server.                  | `http://127.0.0.1:11434` |
+| **Ollama**       | `OLLAMA_IMAGE_DESCRIPTION_PROMPT` | Prompt template for extracted image descriptions. | (Optional)            |
 | **PyTorch**      | `PYTORCH_ENABLE_MPS_FALLBACK` | Fallback to CPU if MPS ops aren't supported. | `1`                      |
 | **PyTorch**      | `TORCH_NUM_THREADS`           | Threads for intraop parallelism on CPU.      | `1`                      |
 | **PyTorch**      | `OMP_NUM_THREADS`             | Threads for OpenMP parallel regions.         | `1`                      |

@@ -27,7 +27,7 @@ This Dockerfile defines the environment for the `marker-ollama-worker`. It combi
 
 ## Installation Steps
 
-1.  **Install Ollama**: Copies `/usr/bin/ollama` from the `ollama-source` stage.
+1.  **Install Ollama**: Copies `/usr/bin/ollama` and `/usr/lib/ollama` from the `ollama-source` stage to ensure GPU runners are available.
 2.  **Setup Workdir**: Sets `/app` as the working directory.
 3.  **Copy Requirements**: Copies `requirements.txt`.
 4.  **System Dependencies**:
