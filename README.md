@@ -159,7 +159,8 @@ You can trigger the worker with a JSON payload. `input_dir` and `output_dir` are
     "marker_processors": "marker.processors.images.ImageProcessor",
     "delete_input_on_success": false,
     "ollama_block_correction_prompt": "Optional custom prompt",
-    "ollama_chunk_workers": 2
+    "ollama_chunk_workers": 2,
+    "ollama_image_description_prompt": "Optional custom prompt for image descriptions"
   }
 }
 ```
@@ -185,7 +186,10 @@ You can trigger the worker with a JSON payload. `input_dir` and `output_dir` are
 
 *   `ollama_block_correction_prompt`: (Optional) A custom prompt string to use for block correction with the LLM. Takes priority over `block_correction_prompt_key`.
 *   `block_correction_prompt_key`: (Optional) A key referencing a predefined prompt from the [Block Correction Prompt Catalog](#block-correction-prompt-catalog). Ignored if `ollama_block_correction_prompt` is provided.
-*   `ollama_chunk_workers`: (Optional) Number of text chunks to process in parallel during LLM phase. Default: auto-calculated.
+*   `ollama_chunk_workers`: (Optional) Number of parallel workers for chunk processing and image description generation. Default: auto-calculated.
+*   `ollama_image_description_prompt`: (Optional) Custom prompt for extracted image descriptions. If omitted, a built-in factual vision prompt is used.
+
+When marker image extraction is enabled, the LLM post-processing phase also describes each extracted image and inserts the descriptions directly into text outputs (`.md`/`.txt`), ideally placed immediately following their corresponding image tags. To ensure clarity for LLMs like NotebookLM or AnythingLM, these descriptions are wrapped in explicit `[BEGIN IMAGE DESCRIPTION]` and `[END IMAGE DESCRIPTION]` markers. If a matching tag cannot be found, the descriptions are appended as a fallback section at the end of the file. Non-text outputs are left unchanged.
 
 #### Performance Tuning Examples
 
@@ -357,6 +361,7 @@ Output Formatting: Provide ONLY the corrected text in clean Markdown.
 | `OLLAMA_MODEL`                           | Name of the Ollama model to use/pull.                 | (Optional)                                       |
 | `OLLAMA_HUGGING_FACE_MODEL_NAME`         | HF Model ID to build from (if `OLLAMA_MODEL` unset).  | (Required if `OLLAMA_MODEL` unset & LLM enabled) |
 | `OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION` | Quantization string to match GGUF file.               | (Required if `OLLAMA_MODEL` unset & LLM enabled) |
+| `OLLAMA_IMAGE_DESCRIPTION_PROMPT`        | Default prompt template for extracted image descriptions. | (Optional)                                   |
 | `HF_HOME`                                | Path to Hugging Face cache.                           | `${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache`    |
 | `OLLAMA_MODELS_DIR`                      | Directory for Ollama models (relative to root mount). | `/.ollama/models`                                |
 | `MARKER_DEBUG`                           | Enable debug mode.                                    | `False`                                          |
@@ -441,6 +446,7 @@ The following variables can also be set to further customize the environment, th
 | **Python**       | `PYTHONUNBUFFERED`            | Force unbuffered stdout/stderr.              | `1`                      |
 | **Hugging Face** | `HF_HUB_OFFLINE`              | Run Hugging Face Hub in offline mode.        | `1`                      |
 | **Ollama**       | `OLLAMA_BASE_URL`             | Base URL for Ollama server.                  | `http://127.0.0.1:11434` |
+| **Ollama**       | `OLLAMA_IMAGE_DESCRIPTION_PROMPT` | Prompt template for extracted image descriptions. | (Optional)            |
 | **PyTorch**      | `PYTORCH_ENABLE_MPS_FALLBACK` | Fallback to CPU if MPS ops aren't supported. | `1`                      |
 | **PyTorch**      | `TORCH_NUM_THREADS`           | Threads for intraop parallelism on CPU.      | `1`                      |
 | **PyTorch**      | `OMP_NUM_THREADS`             | Threads for OpenMP parallel regions.         | `1`                      |

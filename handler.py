@@ -27,9 +27,10 @@ import time
 import json
 import sys
 import torch
+import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, Any, Dict, Tuple, Set
+from typing import Optional, Any, Dict, Tuple, Set, List
 
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
@@ -56,6 +57,9 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_INPUT_FILE_EXTENSIONS: Set[str] = {'.pdf', '.pptx', '.docx', '.xlsx', '.html', '.epub'}
 VALID_OUTPUT_FORMATS: Set[str] = {"json", "markdown", "html", "chunks"}
+IMAGE_FILE_EXTENSIONS: Set[str] = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+TEXT_OUTPUT_FILE_EXTENSIONS: Set[str] = {".md", ".txt"}
+IMAGE_DESCRIPTION_SECTION_HEADING: str = "## Extracted Image Descriptions"
 VRAM_RESERVE_GB: int = 4
 # Cache for marker models (surya, etc) to avoid reloading on every request
 ARTIFACT_DICT: Optional[Dict[str, Any]] = None
@@ -174,6 +178,109 @@ def calculate_optimal_workers(
                 f"marker={marker_workers}, ollama_chunk={ollama_chunk_workers}")
 
     return marker_workers, ollama_chunk_workers
+
+def list_extracted_images_for_output_file(output_file_path: Path) -> List[Path]:
+    """
+    Lists extracted image files located next to a marker output file.
+
+    Args:
+        output_file_path (Path): Path to the marker output text file.
+
+    Returns:
+        List[Path]: Sorted image paths found in the same output directory.
+    """
+    output_dir = output_file_path.parent
+    if not output_dir.exists() or not output_dir.is_dir():
+        return []
+
+    return sorted(
+        [
+            path for path in output_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in IMAGE_FILE_EXTENSIONS
+        ],
+        key=lambda path: path.name.lower()
+    )
+
+def insert_image_descriptions_to_text_file(
+    output_file_path: Path,
+    image_descriptions: List[Tuple[Path, str]]
+) -> bool:
+    """
+    Inserts generated image descriptions into a text output file at the position
+    where the image appears, or appends them to the end if the position cannot be found.
+
+    Args:
+        output_file_path (Path): Marker output text file.
+        image_descriptions (List[Tuple[Path, str]]): (image path, description) tuples.
+
+    Returns:
+        bool: True when descriptions were inserted or appended, False otherwise.
+    """
+    if output_file_path.suffix.lower() not in TEXT_OUTPUT_FILE_EXTENSIONS:
+        logger.info(f"Skipping image description insertion for non-text output file: {output_file_path.name}")
+        return False
+
+    if not image_descriptions:
+        return False
+
+    valid_descriptions = [
+        (image_path, description.strip())
+        for image_path, description in image_descriptions
+        if description and description.strip()
+    ]
+    if not valid_descriptions:
+        return False
+
+    if not output_file_path.exists():
+        logger.warning(f"Cannot insert image descriptions because output file is missing: {output_file_path}")
+        return False
+
+    original_text = output_file_path.read_text(encoding="utf-8")
+    modified_text = original_text
+    unplaced_descriptions = []
+
+    # Try to insert each description after its corresponding image tag
+    for image_path, description in valid_descriptions:
+        filename = image_path.name
+        # Escape filename for regex
+        escaped_filename = re.escape(filename)
+
+        # Pattern for Markdown: ![alt text](path/to/image.png)
+        # We look for the filename in the path part of the Markdown image tag.
+        # This handles absolute paths, relative paths, and optional query parameters.
+        pattern = rf'!\[.*?\]\((?:.*?[/\\])?{escaped_filename}(?:\?.*?)?\)'
+
+        if re.search(pattern, modified_text):
+            # Insertion format: immediately after the tag, with a newline.
+            # We use a blockquote with explicit start/end markers for LLM clarity.
+            indented_description = description.replace("\n", "\n> ")
+            insertion = (
+                f"\n\n> **[BEGIN IMAGE DESCRIPTION]**"
+                f"\n> {indented_description}"
+                f"\n> **[END IMAGE DESCRIPTION]**\n"
+            )
+            modified_text = re.sub(pattern, rf'\g<0>{insertion}', modified_text, count=1)
+        else:
+            unplaced_descriptions.append((image_path, description))
+
+    # Fallback: append unplaced descriptions at the end
+    if unplaced_descriptions:
+        section_lines = ["", IMAGE_DESCRIPTION_SECTION_HEADING, ""]
+        for image_path, description in unplaced_descriptions:
+            section_lines.append(f"### Image: `{image_path.name}`")
+            section_lines.append("**[BEGIN IMAGE DESCRIPTION]**")
+            section_lines.append(description)
+            section_lines.append("**[END IMAGE DESCRIPTION]**")
+            section_lines.append("")
+
+        section_text = "\n".join(section_lines).strip()
+        modified_text = f"{modified_text.rstrip()}\n\n{section_text}\n"
+
+    if modified_text != original_text:
+        output_file_path.write_text(modified_text, encoding="utf-8")
+        return True
+
+    return False
 
 def marker_process_single_file(
     file_path: Path,
@@ -404,6 +511,11 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         ollama_chunk_workers = int(ollama_chunk_workers_override)
         logger.info(f"Using job-level override for ollama_chunk_workers: {ollama_chunk_workers}")
 
+    ollama_image_description_prompt = (
+        job_input.get('ollama_image_description_prompt')
+        or os.environ.get("OLLAMA_IMAGE_DESCRIPTION_PROMPT")
+    )
+
     # --- Execute Marker Processing ---
     logger.info(f"Starting conversion for {len(files_to_process)} files...")
     start_time = time.time()
@@ -467,6 +579,25 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                     prompt_template=ollama_block_correction_prompt,
                     max_chunk_workers=ollama_chunk_workers
                 )
+
+                extracted_images = list_extracted_images_for_output_file(processed_file_path)
+                if not extracted_images:
+                    continue
+
+                image_descriptions = ollama_worker.describe_images(
+                    image_paths=extracted_images,
+                    prompt_template=ollama_image_description_prompt,
+                    max_image_workers=ollama_chunk_workers
+                )
+
+                inserted_descriptions = insert_image_descriptions_to_text_file(
+                    output_file_path=processed_file_path,
+                    image_descriptions=image_descriptions
+                )
+                if inserted_descriptions:
+                    logger.info(
+                        f"Inserted {len(image_descriptions)} image descriptions into {processed_file_path.name}"
+                    )
 
             # Cleanup
             ollama_worker.unload_model()
