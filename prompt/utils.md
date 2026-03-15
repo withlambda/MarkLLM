@@ -24,7 +24,7 @@ def setup_config() -> GlobalConfig:
 ```
 *   **Behavior**:
     1.  Attempts to instantiate `GlobalConfig`, which performs validation of `VOLUME_ROOT_MOUNT_PATH` and other env variables.
-    2.  Ensures required directories exist (`ollama_models`, `ollama_logs`, `hf_home`).
+    2.  Ensures required directories exist (`ollama_models`, `ollama_log_dir`, `hf_home`).
     3.  Sets environment variables that libraries (Ollama, Hugging Face) expect.
     4.  If running as root, updates ownership of these directories to `appuser:appgroup` (with chmod 777 fallback).
     5.  Validates that `OLLAMA_MODEL` or HF name/quantization are set if post-processing is enabled.

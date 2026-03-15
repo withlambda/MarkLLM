@@ -13,6 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+"""
+Utility functions and classes for the marker-ollama-worker.
+Includes environment configuration, resource management (VRAM),
+and path validation utilities.
+"""
+
 import logging
 import os
 import subprocess
@@ -25,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def setup_config() -> GlobalConfig:
     """
-    Validates and configures environment variables, and ensures required directories exist.
+    Validates and configures environment variables and ensures required directories exist.
 
     This function:
     1. Instantiates GlobalConfig, which performs Pydantic validation of environment variables.
@@ -47,34 +53,18 @@ def setup_config() -> GlobalConfig:
         logger.error(f"Configuration validation failed: {e}")
         raise
 
-    # Ensure directories exist
-    os.makedirs(config.ollama_models, exist_ok=True)
-    os.makedirs(config.ollama_logs, exist_ok=True)
-    os.makedirs(config.hf_home, exist_ok=True)
-
-    # Set env vars for libraries that expect them (Ollama, Hugging Face)
-    os.environ["OLLAMA_MODELS"] = str(config.ollama_models)
-    os.environ["OLLAMA_LOGS"] = str(config.ollama_logs)
-    os.environ["HF_HOME"] = str(config.hf_home)
-    os.environ["USE_POSTPROCESS_LLM"] = str(config.use_postprocess_llm).lower()
-    os.environ["CLEANUP_OUTPUT_DIR_BEFORE_START"] = str(config.cleanup_output_dir_before_start).lower()
-
-    # Ownership/Permissions (if root)
-    if os.getuid() == 0:
-        _update_ownership(str(config.ollama_models), str(config.ollama_logs), str(config.hf_home))
-
-    # OLLAMA_MODEL validation for post-processing
     if config.use_postprocess_llm:
-        # Check if the model is provided in the environment. Note: job input overrides are handled in handler.py
-        ollama_model = os.environ.get("OLLAMA_MODEL")
-        if not ollama_model:
-            hf_name = os.environ.get("OLLAMA_HUGGING_FACE_MODEL_NAME")
-            hf_quant = os.environ.get("OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION")
-            if not hf_name or not hf_quant:
-                 raise ValueError(
-                     "OLLAMA_HUGGING_FACE_MODEL_NAME and OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION "
-                     "must be defined when OLLAMA_MODEL is not set and USE_POSTPROCESS_LLM is true"
-                 )
+        # Ensure directories exist
+        os.makedirs(config.ollama_models, exist_ok=True)
+        os.makedirs(config.ollama_log_dir, exist_ok=True)
+        os.makedirs(config.hf_home, exist_ok=True)
+        # Ownership/Permissions (if root)
+        if os.getuid() == 0:
+                _update_ownership(
+                    str(config.ollama_models),
+                    str(config.ollama_log_dir),
+                    str(config.hf_home)
+                )
 
     return config
 

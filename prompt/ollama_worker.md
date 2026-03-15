@@ -23,7 +23,7 @@ The main class for interacting with Ollama.
     Starts the Ollama server (`ollama serve`) in the background. Injects instance configuration variables (prefixed with `OLLAMA_`) into the subprocess environment. Redirects output to `ollama.log` in the configured `log_dir`. Logs environment information (via `_log_env_info`) before starting. Waits for the server to be ready.
 
 *   `_log_env_info(self) -> None`:
-    Internal helper to log CUDA availability, GPU device name, VRAM, and relevant environment variables (`CUDA_VISIBLE_DEVICES`, `OLLAMA_MODELS`, `OLLAMA_LOGS`, etc.). Runs `nvidia-smi -L` to verify GPU status.
+    Internal helper to log CUDA availability, GPU device name, VRAM, and relevant environment variables (`CUDA_VISIBLE_DEVICES`, `OLLAMA_MODELS`, `OLLAMA_LOG_DIR`, etc.). Runs `nvidia-smi -L` to verify GPU status.
 
 *   `stop_server(self) -> None`:
     Stops the Ollama server and its entire process group using `os.killpg` and `signal.SIGTERM`. Falls back to `SIGKILL` if necessary. Ensures no zombie processes remain.

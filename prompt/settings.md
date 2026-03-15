@@ -14,8 +14,6 @@ Global application configuration loaded from environment variables.
 *   `CLEANUP_OUTPUT_DIR_BEFORE_START` (bool): Whether to cleanup the output directory before starting.
 *   `USE_POSTPROCESS_LLM` (bool): Whether to use an LLM for post-processing.
 *   `HF_HOME` (Optional[Path]): Hugging Face home directory.
-*   `OLLAMA_MODELS_DIR` (str): Relative directory for Ollama models.
-*   `OLLAMA_LOGS_DIR` (str): Relative directory for Ollama logs.
 
 ### `MarkerSettings(BaseModel)`
 Configuration for the Marker PDF processing, typically extracted from job input.
@@ -37,9 +35,9 @@ Configuration for the Ollama worker, supporting environment variables (prefixed 
 *   `context_length` (int): `OLLAMA_CONTEXT_LENGTH`
 *   `flash_attention` (str): `OLLAMA_FLASH_ATTENTION`
 *   `keep_alive` (str): `OLLAMA_KEEP_ALIVE`
-*   `log_dir` (Optional[str]): `OLLAMA_LOG_DIR` (also `OLLAMA_LOGS`)
+*   `log_dir` (Optional[str]): `OLLAMA_LOG_DIR` (also `OLLAMA_LOG_DIR`)
 *   `debug` (str): `OLLAMA_DEBUG`
-*   `hf_model_name` (Optional[str]): `OLLAMA_HF_MODEL_NAME` (also `OLLAMA_HUGGING_FACE_MODEL_NAME`)
+*   `hf_model_name` (Optional[str]): `OLLAMA_HUGGING_FACE_MODEL_NAME`
 *   `hf_model_quantization` (Optional[str]): `OLLAMA_HF_MODEL_QUANTIZATION` (also `OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION`)
 *   `num_parallel` (Optional[int]): `OLLAMA_NUM_PARALLEL`
 *   `max_loaded_models` (Optional[int]): `OLLAMA_MAX_LOADED_MODELS`
@@ -47,10 +45,10 @@ Configuration for the Ollama worker, supporting environment variables (prefixed 
 *   `max_queue` (Optional[int]): `OLLAMA_MAX_QUEUE`
 *   `chunk_size` (int): `OLLAMA_CHUNK_SIZE`
 *   `image_description_prompt` (Optional[str]): `OLLAMA_IMAGE_DESCRIPTION_PROMPT`
-*   `models_dir` (Optional[str]): `OLLAMA_MODELS_DIR` (also `OLLAMA_MODELS`)
+*   `models_dir` (Optional[str]): `OLLAMA_MODELS`
 *   `hf_home` (Optional[str]): `OLLAMA_HF_HOME` (also `HF_HOME`)
 
 ## Logic
 *   Uses `pydantic-settings` to automatically load values from the environment.
-*   Calculates absolute paths for `ollama_models`, `ollama_logs`, and `hf_home` based on `volume_root_mount_path`.
+*   Calculates absolute paths for `ollama_models`, `ollama_log_dir`, and `hf_home` based on `volume_root_mount_path`.
 *   Provides a structured way to handle job-specific overrides for both Marker and Ollama.
