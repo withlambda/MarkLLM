@@ -248,6 +248,7 @@ class OllamaWorker:
                     model=self.settings.model,
                     prompt="",
                     stream=False,
+                    options={"num_ctx": self.settings.context_length},
                 )
                 logger.info(f"Model '{self.settings.model}' preloaded successfully.")
                 self._verify_gpu_loading()
@@ -583,6 +584,12 @@ class OllamaWorker:
         if adapter_file:
             modelfile_content += f'ADAPTER "{adapter_file.absolute()}"\n'
 
+        # Set num_ctx in the Modelfile to ensure the context length is consistently
+        # applied. This prevents the GGML_ASSERT embedding buffer overflow that occurs
+        # in ollama >=0.18.0 when num_parallel > 1 and the model's default context
+        # size causes the output embedding buffer to be undersized.
+        modelfile_content += f'PARAMETER num_ctx {self.settings.context_length}\n'
+
         # Use a temporary file for the Modelfile to ensure better compatibility with the Ollama CLI.
         # Some versions of the CLI have issues with reading from stdin (-f -).
         tmp_path = None
@@ -635,6 +642,7 @@ class OllamaWorker:
                     prompt=chunk,
                     system=system_prompt,
                     stream=False,
+                    options={"num_ctx": self.settings.context_length},
                 )
                 return self._extract_response_text(response)
             except Exception as e:
@@ -841,6 +849,7 @@ class OllamaWorker:
                 system=system_prompt,
                 images=[str(image_path)],
                 stream=False,
+                options={"num_ctx": self.settings.context_length},
             )
             description = self._extract_response_text(response)
             if not description:
