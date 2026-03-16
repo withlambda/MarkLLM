@@ -87,7 +87,6 @@ class GlobalConfig(BaseSettings):
     }
     FILE_ENCODING: ClassVar[str] = "utf-8"
     IMAGE_FILE_EXTENSIONS: ClassVar[Set[str]] = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
-    IMAGE_DESCRIPTION_SECTION_HEADING: ClassVar[str] = "## Extracted Image Descriptions"
 
     # block correction prompt file
     block_correction_prompts_file_name: str = Field(
@@ -318,9 +317,9 @@ class OllamaSettings(BaseSettings):
         if not self.model:
             if not (self.hf_model_name and self.hf_model_quantization):
                 raise ValueError(
-                    "OLLAMA_HUGGING_FACE_MODEL_NAME and OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION environment variables"
+                    "OLLAMA_HUGGING_FACE_MODEL_NAME and OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION environment variables "
                     "or the corresponding json keys in the JSON request input to the handler "
-                    "must be defined when OLLAMA_MODEL environment variable or ollama_model JSON request input"
+                    "must be defined when OLLAMA_MODEL environment variable or ollama_model JSON request input "
                     "to the handler is not set."
                 )
         return self

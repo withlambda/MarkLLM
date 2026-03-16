@@ -62,11 +62,11 @@ def setup_config() -> GlobalConfig:
         # Note: This assumes Linux/Docker environment where UID 0 is root
         # This is required to allow non-root user (appuser) to access mounted volumes
         if os.getuid() == 0:
-                _update_ownership(
-                    str(config.ollama_models),
-                    str(config.ollama_log_dir),
-                    str(config.hf_home)
-                )
+            _update_ownership(
+                str(config.ollama_models),
+                str(config.ollama_log_dir),
+                str(config.hf_home)
+            )
 
     return config
 
@@ -94,7 +94,7 @@ def _update_ownership(*paths: str) -> None:
             res = subprocess.run(["gosu", "appuser", "test", "-w", path], capture_output=True, check=False)
             if res.returncode != 0:
                 logger.warning(f"Warning: Could not change ownership of {path}. Trying chmod as fallback...")
-                subprocess.run(["chmod", "-R", "777", path], stderr=subprocess.DEVNULL, check=False)
+                subprocess.run(["chmod", "-R", "775", path], stderr=subprocess.DEVNULL, check=False)
     except (subprocess.CalledProcessError, FileNotFoundError):
         # appuser does not exist or id/gosu command not found
         pass

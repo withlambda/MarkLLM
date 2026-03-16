@@ -585,6 +585,10 @@ class OllamaWorker:
                     logger.error(f"Fatal error processing chunk {chunk_index} after {attempt + 1} attempts: {e}")
                     return chunk  # Fallback to original
 
+        # Safety fallback: should not be reached, but guards against implicit None
+        logger.warning(f"Chunk {chunk_index} processing loop exited unexpectedly. Returning original chunk.")
+        return chunk
+
     @staticmethod
     def _extract_response_text(response: object) -> str:
         """

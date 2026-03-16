@@ -22,7 +22,7 @@ ARG DOWNLOAD_MARKER_MODELS="false"
 ARG BASE_IMAGE=pytorch/pytorch:${PYTORCH_VERSION}-cuda${CUDA_VERSION}-cudnn${CUDNN_VERSION}-runtime
 
 # 2. LOAD OLLAMA IMAGE
-FROM ollama/ollama:${OLLAMA_VERSION} as ollama-source
+FROM ollama/ollama:${OLLAMA_VERSION} AS ollama-source
 
 # 3. BASE IMAGE
 FROM ${BASE_IMAGE}

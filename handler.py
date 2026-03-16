@@ -177,6 +177,9 @@ def insert_image_descriptions_to_text_file(
     Inserts generated image descriptions into a text output file at the position
     where the image appears, or appends them to the end if the position cannot be found.
 
+    Only text-based output formats (.md, .txt) are processed. Non-text formats
+    (e.g., .json, .html) are skipped to avoid producing invalid syntax.
+
     Args:
         app_config (GlobalConfig): Global configuration settings.
         output_file_path (Path): Marker output text file.
@@ -186,6 +189,14 @@ def insert_image_descriptions_to_text_file(
         bool: True when descriptions were inserted or appended, False otherwise.
     """
     if not image_descriptions:
+        return False
+
+    # Only insert descriptions into text-based output formats (markdown, plain text).
+    # Inserting markdown-formatted descriptions into structured formats like JSON or HTML
+    # would produce invalid syntax.
+    TEXT_EXTENSIONS = {".md", ".txt"}
+    if output_file_path.suffix.lower() not in TEXT_EXTENSIONS:
+        logger.debug(f"Skipping image description insertion for non-text file: {output_file_path.name}")
         return False
 
     valid_descriptions = [
@@ -630,6 +641,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"Error during Ollama post-processing phase: {e}")
             if ollama_worker:
                 ollama_worker.stop_server()
+            raise
 
     # Cleanup: Delete the original file on success
     # Only delete it if we reached here successfully and delete_input_on_success is enabled
