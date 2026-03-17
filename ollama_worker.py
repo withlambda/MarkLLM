@@ -543,6 +543,12 @@ class OllamaWorker:
             )
         )
 
+        # Set num_ctx in the Modelfile to ensure the context length is consistently
+        # applied. This prevents the GGML_ASSERT embedding buffer overflow that occurs
+        # in ollama >=0.18.0 when num_parallel > 1 and the model's default context
+        # size causes the output embedding buffer to be undersized.
+        modelfile_content += f'PARAMETER num_ctx {self.settings.context_length}\n'
+
         # Use a temporary file for the Modelfile to ensure better compatibility with the Ollama CLI.
         # Some versions of the CLI have issues with reading from stdin (-f -).
         tmp_path = None
