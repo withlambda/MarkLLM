@@ -16,7 +16,7 @@
 """
 Main handler for the marker-ollama-worker.
 Orchestrates the conversion of documents using the marker-pdf library and
-optional post-processing using an Ollama-powered LLM.
+optional post-processing using a vLLM-powered LLM server.
 """
 
 import atexit
@@ -55,8 +55,8 @@ from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
 from marker.config.parser import ConfigParser
 from marker.output import text_from_rendered
-from ollama_worker import OllamaWorker
-from settings import MarkerSettings, OllamaSettings, GlobalConfig
+from vllm_worker import VllmWorker
+from settings import MarkerSettings, VllmSettings, GlobalConfig
 from utils import (
     check_is_dir,
     check_is_not_file,
@@ -364,36 +364,35 @@ def marker_process_single_file(
         # Return False and None to allow other files in the pool to continue
         return False, None
 
-def extract_ollama_settings_from_job_input(
+def extract_vllm_settings_from_job_input(
     app_config: GlobalConfig,
     job_input: Dict[str, Any],
-) -> OllamaSettings:
+) -> VllmSettings:
     """
-    Extracts and validates Ollama-specific settings from the RunPod job input.
-    Filters keys starting with 'ollama_' and uses them to instantiate OllamaSettings.
+    Extracts and validates vLLM-specific settings from the RunPod job input.
+    Filters keys starting with 'vllm_' and uses them to instantiate VllmSettings.
 
     Args:
         app_config (GlobalConfig): The global configuration settings.
         job_input (Dict[str, Any]): The raw input dictionary from the RunPod job.
 
     Returns:
-        OllamaSettings: A validated configuration object for Ollama.
+        VllmSettings: A validated configuration object for vLLM.
     """
-    # Valid OllamaSettings field names (check via model_fields)
-    valid_ollama_fields = set(OllamaSettings.model_fields.keys())
+    # Valid VllmSettings field names (check via model_fields)
+    valid_vllm_fields = set(VllmSettings.model_fields.keys())
 
-    ollama_input = {}
+    vllm_input = {}
     for k, v in job_input.items():
-        if k.startswith("ollama_"):
-            field_name = k[len("ollama_"):]
-            if field_name not in valid_ollama_fields:
+        if k.startswith("vllm_"):
+            if k not in valid_vllm_fields:
                 logger.warning(
-                    f"Unknown ollama setting '{k}' in job input. "
-                    f"Valid fields: {sorted(valid_ollama_fields)}"
+                    f"Unknown vllm setting '{k}' in job input. "
+                    f"Valid fields: {sorted(valid_vllm_fields)}"
                 )
-            ollama_input[field_name] = v
+            vllm_input[k] = v
 
-    return OllamaSettings(app_config, **ollama_input)
+    return VllmSettings(app_config, **vllm_input)
 
 def extract_marker_settings_from_job_input(job_input: Dict[str, Any]) -> MarkerSettings:
     """
@@ -426,21 +425,20 @@ def extract_marker_settings_from_job_input(job_input: Dict[str, Any]) -> MarkerS
 
 def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     """
-    RunPod Serverless Handler for document conversion using marker-pdf and Ollama.
+    RunPod Serverless Handler for document conversion using marker-pdf and vLLM.
 
     This function executes the following workflow:
     1.  Initialization: Loads global configuration and initializes VRAM logging.
-    2.  Settings Extraction: Parses Ollama and Marker-specific settings from the job input.
-    3.  Ollama Setup: If LLM post-processing is enabled, it initializes the Ollama worker
-        and ensures the required model is loaded.
+    2.  Settings Extraction: Parses vLLM and Marker-specific settings from the job input.
+    3.  vLLM Setup: If LLM post-processing is enabled, initializes the VllmWorker.
     4.  Path Validation: Resolves and validates input and output directories.
     5.  Resource Calculation: Determines the optimal number of worker processes based on
         available VRAM and the number of files to process.
     6.  Batch Processing: Uses a multiprocessing pool to convert files in parallel:
         -   Each worker process loads its own copy of marker models.
         -   Individual file failures are caught and logged, allowing the batch to continue.
-    7.  LLM Post-processing (Optional): If enabled, processes the converted text through
-        the Ollama model for OCR error correction and image descriptions.
+    7.  LLM Post-processing (Optional): If enabled, starts the vLLM server as a subprocess
+        and processes the converted text through the model for OCR error correction and image descriptions.
     8.  Cleanup: Deletes input files if requested and returns a summary of the operation.
 
     Args:
@@ -459,17 +457,14 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     job_input = job.get("input", {})
 
     # Extract structured settings
-    ollama_settings = extract_ollama_settings_from_job_input(app_config=app_config, job_input=job_input)
+    vllm_settings = extract_vllm_settings_from_job_input(app_config=app_config, job_input=job_input)
     marker_settings = extract_marker_settings_from_job_input(job_input=job_input)
 
-    ollama_worker: Optional[OllamaWorker] = None
+    vllm_worker: Optional[VllmWorker] = None
 
-    # --- 1. Ollama Model Setup (Pre-processing) ---
+    # --- 1. vLLM Worker Setup (Pre-processing) ---
     if app_config.use_postprocess_llm:
-        ollama_worker = OllamaWorker(settings=ollama_settings)
-        ollama_worker.initialize_model()
-        torch.cuda.empty_cache()
-        log_vram_usage("After initialize_model")
+        vllm_worker = VllmWorker(settings=vllm_settings)
 
     # Read base paths from global config
     storage_bucket_path = app_config.volume_root_mount_path
@@ -593,35 +588,35 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.info("Marker Processing completed")
 
-    # --- 3. Ollama LLM Post-processing (Parallel) ---
-    if app_config.use_postprocess_llm and ollama_worker and processed_files:
+    # --- 3. vLLM LLM Post-processing (Parallel) ---
+    if app_config.use_postprocess_llm and vllm_worker and processed_files:
         # Note: Marker worker processes have terminated, releasing their VRAM
-        # Ollama now has full access to VRAM
-        log_vram_usage("Before starting Ollama server")
+        # vLLM now has full access to VRAM
+        log_vram_usage("Before starting vLLM server")
 
-        logger.info("--- Starting Ollama for Post-processing ---")
+        logger.info("--- Starting vLLM for Post-processing ---")
 
         try:
-            # Use OllamaWorker context manager to start and ensure the model
-            with ollama_worker:
-                logger.info(f"Post-processing {len(processed_files)} files with {ollama_settings.chunk_workers} chunk workers...")
+            # Use VllmWorker context manager to start server and wait for readiness
+            with vllm_worker:
+                logger.info(f"Post-processing {len(processed_files)} files with {vllm_settings.vllm_chunk_workers} chunk workers...")
 
                 # Process files sequentially, with parallel chunk processing within each file
                 for processed_file_path in processed_files:
-                    ollama_worker.process_file(
+                    vllm_worker.process_file(
                         file_path=processed_file_path,
-                        prompt_template=ollama_settings.block_correction_prompt,
-                        max_chunk_workers=ollama_settings.chunk_workers
+                        prompt_template=vllm_settings.vllm_block_correction_prompt,
+                        max_chunk_workers=vllm_settings.vllm_chunk_workers
                     )
 
                     extracted_images = list_extracted_images_for_output_file(app_config, processed_file_path)
                     if not extracted_images:
                         continue
 
-                    image_descriptions = ollama_worker.describe_images(
+                    image_descriptions = vllm_worker.describe_images(
                         image_paths=extracted_images,
-                        prompt_template=ollama_settings.image_description_prompt,
-                        max_image_workers=ollama_settings.chunk_workers
+                        prompt_template=vllm_settings.vllm_image_description_prompt,
+                        max_image_workers=vllm_settings.vllm_chunk_workers
                     )
 
                     inserted_descriptions = insert_image_descriptions_to_text_file(
@@ -638,9 +633,9 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             log_vram_usage("Final")
 
         except Exception as e:
-            logger.error(f"Error during Ollama post-processing phase: {e}")
-            if ollama_worker:
-                ollama_worker.stop_server()
+            logger.error(f"Error during vLLM post-processing phase: {e}")
+            if vllm_worker:
+                vllm_worker.stop_server()
             raise
 
     # Cleanup: Delete the original file on success

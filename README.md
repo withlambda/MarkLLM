@@ -1,14 +1,12 @@
-# Marker-PDF with Ollama worker (For RunPod Serverless)
+# Marker-PDF with vLLM worker (For RunPod Serverless)
 
-This project provides a Dockerized solution for running `marker-pdf` with `Ollama` LLM support as a **RunPod Serverless Worker**. It is designed to process documents (PDF, DOCX, PPTX, etc.) on-demand, leveraging RunPod's GPU infrastructure.
+This project provides a Dockerized solution for running `marker-pdf` with `vLLM` LLM support as a **RunPod Serverless Worker**. It is designed to process documents (PDF, DOCX, PPTX, etc.) on-demand, leveraging RunPod's GPU infrastructure.
 
 ## Architecture
 
 The container runs a Python handler script that listens for jobs from the RunPod API. When a job is received, it:
-1.  **Model Setup**:
-    *   If `OLLAMA_MODEL` is set, it checks if the model exists locally (pulling it from the Ollama registry if necessary).
-    *   If `OLLAMA_MODEL` is *not* set, it attempts to **build** an Ollama model from a cached Hugging Face GGUF file (specified by `OLLAMA_HUGGING_FACE_MODEL_NAME` and `OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION`).
-2.  **Processing**: Processes the specified input directory using `marker-pdf` (and `marker` for other formats).
+1.  **Marker Phase**: Processes the specified input directory using `marker-pdf` for document conversion (OCR, layout detection, etc.).
+2.  **vLLM Phase**: If LLM post-processing is enabled, starts a vLLM server subprocess, waits for readiness via health-check polling, and processes converted text through the model for OCR error correction and image descriptions.
 3.  **Cleanup**: Deletes the input file upon successful processing (optional).
 4.  **Result**: Returns the result (status, processed files, errors).
 
@@ -23,19 +21,20 @@ There are typically two processes named `python3 -u handler.py`. This is standar
 
 This dual-process architecture provides isolation; the supervisor remains responsive even if a worker process encounters a critical failure (like a segfault or Out-of-Memory error). Both processes share the same command name because they are initialized using the `spawn` start method, which is required for safe CUDA operations.
 
-#### Ollama Processes
-When LLM post-processing is enabled, you will see two `ollama` processes:
-*   **Ollama Server**: This is the main orchestrator (`ollama serve`) that manages model loading and provides the API.
-*   **Ollama Runner**: This is a child process spawned by the server to perform the actual inference. It typically has a larger memory footprint (RES) as it contains the model weights in VRAM (or RAM if falling back to CPU).
-
-**Note:** If you see an `ollama` process with extremely high CPU usage (e.g., > 1000%), it usually indicates that the model is running on the CPU instead of the GPU. This worker includes the necessary GPU runners to avoid this, but it may still happen if VRAM is insufficient.
+#### vLLM Process
+When LLM post-processing is enabled, the handler spawns a vLLM server subprocess (`vllm serve`):
+*   The server is started after Marker processing completes and VRAM is freed.
+*   A health-check endpoint (`GET /health`) is polled until the server is ready.
+*   Communication uses the OpenAI-compatible API via the `openai` Python client.
+*   After all post-processing is complete, the server is gracefully shut down (SIGTERM → wait 10s → SIGKILL).
+*   If the server crashes mid-processing, one automatic restart is attempted before failing the job.
 
 ## Features
 
 *   **Serverless Worker**: Fully compatible with RunPod Serverless.
 *   **Multi-Format Support**: Supports `.pdf`, `.pptx`, `.docx`, `.xlsx`, `.html`, and `.epub`.
-*   **Ollama Integration**: Leverages a local Ollama instance for enhanced OCR and conversion.
-*   **Offline/Cached Models**: Can build Ollama models dynamically from a mounted Hugging Face cache, avoiding repeated network downloads.
+*   **vLLM Integration**: Leverages a local vLLM server subprocess for high-performance LLM inference via an OpenAI-compatible API.
+*   **Local Model Weights**: Loads models directly from a local directory (`VLLM_MODEL_PATH`), avoiding runtime downloads.
 *   **NVIDIA Optimized**: Uses the official `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime` base image for maximum GPU performance.
 *   **Configurable**: Job inputs can override default environment variables.
 
@@ -43,28 +42,16 @@ When LLM post-processing is enabled, you will see two `ollama` processes:
 
 The worker is designed to maximize GPU utilization while avoiding Out-of-Memory (OOM) errors. It follows a two-phase processing model:
 1.  **Marker Phase**: Documents are converted to the target format. Marker models (Surya, etc.) are loaded into VRAM.
-2.  **Ollama Phase**: If post-processing is enabled, Marker models are moved to CPU and the CUDA cache is cleared to provide Ollama with full access to the VRAM.
+2.  **vLLM Phase**: After Marker completes, CUDA cache is cleared and a configurable VRAM recovery delay (`VLLM_VRAM_RECOVERY_DELAY`) ensures GPU memory is fully released before vLLM starts.
 
-This ensures that Ollama can load large LLMs into VRAM even if the Marker models previously consumed most of the available memory. For the next job, Marker models are moved back to GPU as needed.
+This sequential execution model ensures that vLLM has full access to VRAM for loading and serving the LLM.
 
 ### Troubleshooting GPU Usage
 
-If you suspect Ollama is running on RAM (CPU) instead of VRAM (GPU), check the following:
-
-1.  **VRAM Logs**: Look for `VRAM Usage (After Marker)` in the worker logs. If `Free` memory is low (e.g., < 2GB) before Ollama starts, it may fallback to CPU. The current version of this worker automatically frees up VRAM before Ollama starts.
-2.  **Ollama Debugging**: Set the environment variable `OLLAMA_DEBUG=1`. This will log detailed information from the Ollama server to the container's standard output (and `ollama.log`), including which layers were loaded onto the GPU.
-3.  **Model Size**: Ensure your chosen model fits in the available VRAM. A 7B model usually requires ~5-8GB depending on quantization.
-4.  **GPU Visibility**: Check the `Environment Info` section at the start of the logs to verify that `CUDA_VISIBLE_DEVICES` is correctly set and `nvidia-smi` is accessible.
-
-### Troubleshooting Ollama 500 Errors / Runner Crashes
-
-Ollama has problems with certain vision-enabled models when they
-were built from GGUF files. The Ollama server answers with 500 status code responses.
-To fix this, try to create the model from Safetensors weights in case
-you have access to them.
-The specific error appears also in the Ollama server logs shows a `GGML_ASSERT` failure like
-`(n_outputs_prev + n_outputs)*n_embd <= (int64_t) embd_size` followed by `SIGABRT` and
-`llama runner terminated` with `exit status 2`.
+1.  **VRAM Logs**: Look for `VRAM Usage (After Marker)` in the worker logs. If `Free` memory is low (e.g., < 2GB) before vLLM starts, increase `VLLM_VRAM_RECOVERY_DELAY` or reduce `VLLM_GPU_UTIL`.
+2.  **Model Size**: Ensure your chosen model fits in the available VRAM with the configured `VLLM_GPU_UTIL` fraction. A 7B model usually requires ~5-8GB depending on quantization.
+3.  **GPU Visibility**: Check the `Environment Info` section at the start of the logs to verify that `CUDA_VISIBLE_DEVICES` is correctly set and `nvidia-smi` is accessible.
+4.  **vLLM Server Logs**: The vLLM subprocess stdout/stderr is captured and logged. Check for OOM errors or CUDA-related failures in the worker logs.
 
 ## Prerequisites
 
@@ -88,25 +75,14 @@ The specific error appears also in the Ollama server logs shows a `GGML_ASSERT` 
 
 ## Model Management
 
-### Ollama model
+### vLLM Model
 
-This worker supports two primary methods for managing Ollama models, with a resilient fallback strategy:
+vLLM loads model weights directly from a local directory specified by `VLLM_MODEL_PATH`. The model name for API calls is either set explicitly via `VLLM_MODEL` or derived automatically from the directory name.
 
-#### 1. Resilient Pull & Build (Automatic)
-The worker implements a multi-step discovery strategy for the model specified by `OLLAMA_MODEL`:
-1.  **Check Local**: It first checks if the model is already present in the local Ollama registry.
-2.  **Pull**: If not found, it attempts to pull the model from the Ollama registry.
-3.  **Fallback to Build**: If the pull fails (e.g., private model or registry issue) AND the Hugging Face configuration is provided (`OLLAMA_HUGGING_FACE_MODEL_NAME` and `OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION`), it will automatically attempt to **build** the model from your local Hugging Face cache.
-
-This ensures that once a model is specified, the worker will do its best to make it available using all configured sources.
-
-#### 2. Direct Build from Hugging Face Cache (Offline/Mounted)
-If you wish to skip the registry pull entirely and always build from your HF cache, ensure `OLLAMA_MODEL` is unset while providing the HF-specific variables.
-
-For the build process to work:
-- `OLLAMA_HUGGING_FACE_MODEL_NAME` (e.g., `Qwen/Qwen2.5-VL-3B-Instruct-GGUF`) and `OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION` (e.g., `Q4_K_M`) must be set.
-- The Hugging Face cache must be mounted under the path specified by `HF_HOME`.
-- The worker will identify the GGUF file and create the Ollama model before starting the processing phase.
+For the model to work:
+- `VLLM_MODEL_PATH` must point to a directory containing the model weights (e.g., SafeTensors format).
+- The model must fit within the available VRAM (controlled by `VLLM_GPU_UTIL` and `VLLM_VRAM_GB_MODEL`).
+- The Hugging Face cache should be mounted under the path specified by `HF_HOME` for any tokenizer or config files.
 
 ### Marker/Surya internal models
 
