@@ -1,5 +1,5 @@
 """
-Configuration settings and models for the marker-ollama-worker.
+Configuration settings and models for the marker-vllm-worker.
 This module defines the Pydantic models used to parse and validate
 environment variables and job input for global, marker, and vLLM configurations.
 """
@@ -242,10 +242,15 @@ class VllmSettings(BaseSettings):
                         and the block correction prompts library.
             **kwargs: Additional keyword arguments passed to the BaseSettings constructor.
         """
+        # Capture env var state before super().__init__(), because model validators
+        # (init_environment_variables) export defaults during construction, which would
+        # make the post-init auto-calc check always see VLLM_MAX_NUM_SEQS as already set.
+        max_num_seqs_from_env = os.environ.get('VLLM_MAX_NUM_SEQS')
+
         super().__init__(**kwargs)
 
         # Auto-compute vllm_max_num_seqs from VRAM if not explicitly provided
-        if 'vllm_max_num_seqs' not in kwargs and os.environ.get('VLLM_MAX_NUM_SEQS') is None:
+        if 'vllm_max_num_seqs' not in kwargs and max_num_seqs_from_env is None:
             # Calculate how many parallel sequences fit in remaining VRAM
             # Note: marker models are on CPU during the vLLM processing phase, so we don't subtract them
             available_vram_gb = app_config.vram_gb_total - app_config.vram_gb_reserve - self.vllm_vram_gb_model

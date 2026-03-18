@@ -1,5 +1,5 @@
 """
-Unit tests for helper functions that merge Ollama-generated image descriptions
+Unit tests for helper functions that merge vLLM-generated image descriptions
 into marker text outputs.
 """
 
@@ -74,13 +74,13 @@ def _install_dependency_stubs() -> None:
     marker_output_module.text_from_rendered = lambda *_args, **_kwargs: ("", {}, [])
     sys.modules.setdefault("marker.output", marker_output_module)
 
-    ollama_worker_module = types.ModuleType("ollama_worker")
+    vllm_worker_module = types.ModuleType("vllm_worker")
 
-    class DummyOllamaWorker:
+    class DummyVllmWorker:
         pass
 
-    ollama_worker_module.OllamaWorker = DummyOllamaWorker
-    sys.modules.setdefault("ollama_worker", ollama_worker_module)
+    vllm_worker_module.VllmWorker = DummyVllmWorker
+    sys.modules.setdefault("vllm_worker", vllm_worker_module)
 
 
 def _import_handler_module():
