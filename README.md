@@ -399,22 +399,31 @@ Output Formatting: Provide ONLY the corrected text in clean Markdown.
 
 ### Environment Variables
 
-The worker can be configured using environment variables. For `OllamaSettings` and `MarkerSettings`, properties can be set using the `OLLAMA_` or `MARKER_` prefix respectively (e.g., `MARKER_WORKERS`, `OLLAMA_CONTEXT_LENGTH`).
+The worker can be configured using environment variables. For `VllmSettings` and `MarkerSettings`, properties can be set using the `VLLM_` or `MARKER_` prefix respectively (e.g., `MARKER_WORKERS`, `VLLM_MAX_MODEL_LEN`).
 
 | Variable                                 | Description                                                | Default                                          |
 |:-----------------------------------------|:-----------------------------------------------------------|:-------------------------------------------------|
 | `VOLUME_ROOT_MOUNT_PATH`                 | Base path for storage (Required).                          | **None** (Must be set)                           |
 | `USE_POSTPROCESS_LLM`                    | Enable LLM post-processing for the output results.         | `true`                                           |
 | `CLEANUP_OUTPUT_DIR_BEFORE_START`        | Delete output directory before starting.                   | `false`                                          |
-| `OLLAMA_MODEL`                           | Name of the Ollama model to use/pull.                      | (Optional)                                       |
-| `OLLAMA_HUGGING_FACE_MODEL_NAME`         | HF Model ID to build from (if `OLLAMA_MODEL` unset).       | (Required if `OLLAMA_MODEL` unset & LLM enabled) |
-| `OLLAMA_HUGGING_FACE_MODEL_QUANTIZATION` | Quantization string to match GGUF file.                    | (Required if `OLLAMA_MODEL` unset & LLM enabled) |
-| `OLLAMA_CONTEXT_LENGTH`                  | Context window length (tokens) per request.                | `4096`                                           |
-| `OLLAMA_VRAM_FACTOR`                     | VRAM (GB) per token for context calculation.               | `0.00013`                                        |
-| `OLLAMA_IMAGE_DESCRIPTION_PROMPT`        | Default prompt template for extracted image descriptions.  | (Optional)                                       |
+| `VLLM_MODEL_PATH`                        | Path to model weights on disk (Required).                  | **None** (Must be set)                           |
+| `VLLM_MODEL`                             | Model name for API calls (derived from path if unset).     | (Optional)                                       |
+| `VLLM_VRAM_GB_MODEL`                     | VRAM consumed by the model in GB (Required).               | **None** (Must be set)                           |
+| `VLLM_HOST`                              | Host URL where vLLM server runs.                           | `http://127.0.0.1:8000`                          |
+| `VLLM_PORT`                              | Port for the vLLM server.                                  | `8000`                                           |
+| `VLLM_GPU_UTIL`                          | Maximum GPU memory fraction for vLLM (0.0–1.0).           | `0.90`                                           |
+| `VLLM_MAX_MODEL_LEN`                     | Maximum context/sequence length (tokens).                  | `16384`                                          |
+| `VLLM_MAX_NUM_SEQS`                      | Max concurrent sequences (auto-calculated from VRAM).      | `16`                                             |
+| `VLLM_STARTUP_TIMEOUT`                   | Seconds to wait for vLLM health check on startup.          | `120`                                            |
+| `VLLM_VRAM_RECOVERY_DELAY`               | Seconds to wait after Marker before starting vLLM.         | `10`                                             |
+| `VLLM_MAX_RETRIES`                       | Maximum retries for failed API calls.                      | `3`                                              |
+| `VLLM_RETRY_DELAY`                       | Delay between retries in seconds.                          | `2.0`                                            |
+| `VLLM_CHUNK_SIZE`                        | Size of text chunks in tokens for correction phase.        | `4000`                                           |
+| `VLLM_CHUNK_WORKERS`                     | Async tasks for parallel chunk processing.                 | `16`                                             |
+| `VLLM_IMAGE_DESCRIPTION_PROMPT`          | Custom prompt for extracted image descriptions.            | (Optional)                                       |
+| `VLLM_BLOCK_CORRECTION_PROMPT_KEY`       | Key into the block correction prompt catalog.              | (Optional)                                       |
+| `VLLM_BLOCK_CORRECTION_PROMPT`           | Custom block correction prompt override.                   | (Optional)                                       |
 | `HF_HOME`                                | Path to Hugging Face cache.                                | `${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache`    |
-| `OLLAMA_MODELS`                          | Absolute path to Ollama models directory.                  | `${VOLUME_ROOT_MOUNT_PATH}/.ollama/models`       |
-| `OLLAMA_LOG_DIR`                         | Absolute path to Ollama logs directory.                    | `${VOLUME_ROOT_MOUNT_PATH}/.ollama/logs`         |
 | `MARKER_DEBUG`                           | Enable debug mode.                                         | `False`                                          |
 | `MARKER_WORKERS`                         | Number of Marker workers (env-level default).              | `auto`                                           |
 | `MARKER_PAGINATE_OUTPUT`                 | Whether to paginate output (env-level default).            | `false`                                          |
@@ -430,32 +439,28 @@ The worker can be configured using environment variables. For `OllamaSettings` a
 
 The worker includes adaptive parallelization to maximize GPU utilization (optimized for 24GB VRAM). These settings are automatically calculated based on workload but can be manually overridden.
 
-| Variable                 | Description                                                                                      | Default   | Recommended Range |
-|:-------------------------|:-------------------------------------------------------------------------------------------------|:----------|:------------------|
-| `VRAM_GB_TOTAL`          | Total VRAM available on your GPU (used for auto-tuning worker counts).                           | `24`      | `8-80`            |
-| `OLLAMA_CHUNK_SIZE`      | Characters per chunk for LLM processing. Smaller = more parallelism, larger = better context.    | `4000`    | `2000-8000`       |
+| Variable                    | Description                                                                                      | Default   | Recommended Range |
+|:----------------------------|:-------------------------------------------------------------------------------------------------|:----------|:------------------|
+| `VRAM_GB_TOTAL`             | Total VRAM available on your GPU (used for auto-tuning worker counts).                           | `24`      | `8-80`            |
+| `VLLM_CHUNK_SIZE`           | Tokens per chunk for LLM processing. Smaller = more parallelism, larger = better context.        | `4000`    | `2000-8000`       |
 | `MARKER_VRAM_GB_PER_WORKER` | Estimated VRAM per Marker worker (GB). Used for auto-calculating `marker_workers`.               | `5`       | `3-6`             |
-| `OLLAMA_CONTEXT_LENGTH`  | Context length (tokens) per request. Used for auto-calculating `OLLAMA_NUM_PARALLEL`.            | `4096`    | `2048-32768`      |
-| `OLLAMA_VRAM_FACTOR`     | VRAM (GB) per token. Used for auto-calculating `OLLAMA_NUM_PARALLEL` (default: 0.00013).         | `0.00013` | `0.0001-0.0005`   |
-| `OLLAMA_VRAM_GB_MODEL`    | Estimated VRAM (GB) for the base model weights. Used for auto-calculating `OLLAMA_NUM_PARALLEL`. | `8`       | `2-16`            |
-| `OLLAMA_MAX_RETRIES`     | Maximum retries for LLM chunk processing on transient/recoverable errors.                        | `3`       | `1-10`            |
-| `OLLAMA_RETRY_DELAY`     | Base delay (seconds) for exponential backoff between retries.                                    | `2.0`     | `1.0-5.0`         |
-| `OLLAMA_NUM_PARALLEL`    | Max parallel requests per model (auto-calculated from VRAM if unset). `ollama_chunk_workers` is automatically capped to this value. | `auto`    | `1-8`             |
-| `OLLAMA_FLASH_ATTENTION` | Enable Flash Attention for improved memory efficiency.                                           | `1`       | `0, 1`            |
-| `OLLAMA_KV_CACHE_TYPE`   | Quantization type for K/V cache (e.g., `f16`, `q8_0`, `q4_0`).                                   | `f16`     | `f16, q8_0, q4_0` |
-| `OLLAMA_MAX_QUEUE`       | Maximum number of queued requests before rejection.                                              | `512`     | `100-2048`        |
-| `OLLAMA_KEEP_ALIVE`      | How long models stay in memory after a request (e.g., `5m`, `1h`, `-1` for infinite).            | `-1`      | `0`, `5m`, `-1`   |
+| `VLLM_MAX_MODEL_LEN`       | Max context/sequence length (tokens). Used for auto-calculating `VLLM_MAX_NUM_SEQS`.             | `16384`   | `2048-32768`      |
+| `VRAM_GB_PER_TOKEN_FACTOR`  | VRAM (GB) per token. Used for auto-calculating `VLLM_MAX_NUM_SEQS` (default: 0.00013).           | `0.00013` | `0.0001-0.0005`   |
+| `VLLM_VRAM_GB_MODEL`        | VRAM (GB) consumed by the model. Used for auto-calculating `VLLM_MAX_NUM_SEQS`.                  | (Required)| `2-16`            |
+| `VLLM_MAX_RETRIES`          | Maximum retries for LLM chunk processing on transient/recoverable errors.                        | `3`       | `1-10`            |
+| `VLLM_RETRY_DELAY`          | Base delay (seconds) for exponential backoff between retries.                                    | `2.0`     | `1.0-5.0`         |
+| `VLLM_MAX_NUM_SEQS`         | Max concurrent sequences (auto-calculated from VRAM if unset).                                   | `16`      | `1-32`            |
+| `VLLM_GPU_UTIL`             | Maximum GPU memory fraction for vLLM.                                                            | `0.90`    | `0.5-0.95`        |
 
 #### Adaptive Worker Scaling (Auto Mode)
 
 When set to `auto` (default), the worker automatically optimizes parallelism based on:
 
-**Ollama Concurrency**:
-- `OLLAMA_NUM_PARALLEL` is calculated based on available VRAM and context window size:
-  `parallel = floor((TOTAL_VRAM - VRAM_RESERVE - OLLAMA_BASE_VRAM) / (OLLAMA_VRAM_FACTOR * OLLAMA_CONTEXT_LENGTH))`
-- `ollama_chunk_workers` (Python threads) defaults to 16, but is **automatically capped** to `OLLAMA_NUM_PARALLEL` to prevent overwhelming the Ollama server with more concurrent requests than it can handle.
-- Before processing begins, the model is **preloaded** into VRAM by sending an empty prompt to the Ollama server (per [Ollama FAQ](https://docs.ollama.com/faq#how-can-i-preload-a-model-into-ollama-to-get-faster-response-times)). This prevents "model runner has unexpectedly stopped" crashes when many parallel requests arrive before the model is ready.
-- After preloading, the worker runs `ollama ps` to **verify GPU loading** (per [Ollama FAQ](https://docs.ollama.com/faq#how-can-i-tell-if-my-model-was-loaded-onto-the-gpu)). If the model is running on CPU instead of GPU, a warning is logged to help diagnose performance or driver issues.
+**vLLM Concurrency**:
+- `VLLM_MAX_NUM_SEQS` is calculated based on available VRAM and context window size:
+  `max_num_seqs = floor((TOTAL_VRAM - VRAM_RESERVE - VLLM_VRAM_GB_MODEL) / (VRAM_GB_PER_TOKEN_FACTOR * VLLM_MAX_MODEL_LEN))`
+- `vllm_chunk_workers` (async tasks) defaults to 16, controlling parallel chunk processing.
+- The vLLM server is started as a subprocess and monitored via a health check endpoint with a configurable startup timeout (`VLLM_STARTUP_TIMEOUT`).
 
 **Marker Concurrency**:
 - `marker_workers` is scaled based on number of files and available VRAM (capped at 4).
@@ -464,17 +469,17 @@ When set to `auto` (default), the worker automatically optimizes parallelism bas
 
 **Single File** (1 file):
 - `marker_workers=1` (no file-level parallelism needed)
-- `ollama_chunk_workers` (capped to `OLLAMA_NUM_PARALLEL`)
+- `vllm_chunk_workers` for parallel chunk processing
 - **Best for**: Processing single large PDFs efficiently
 
 **Small Batch** (2-3 files):
 - `marker_workers` (moderate file parallelism, up to 2)
-- `ollama_chunk_workers` (capped to `OLLAMA_NUM_PARALLEL`)
+- `vllm_chunk_workers` for parallel chunk processing
 - **Best for**: Medium workloads with moderate-sized PDFs
 
 **Large Batch** (4+ files):
 - `marker_workers` (maximize marker file parallelism, up to 4)
-- `ollama_chunk_workers` (capped to `OLLAMA_NUM_PARALLEL`, files processed sequentially)
+- `vllm_chunk_workers` for parallel chunk processing (files processed sequentially)
 - **Best for**: Batch processing many small-to-medium PDFs
 
 *Note: All auto-calculations are bounded by available VRAM (VRAM_GB_TOTAL).*
@@ -494,14 +499,14 @@ For specific hardware or workloads, you can override auto-tuning:
 ```bash
 # Example: 48GB VRAM GPU, medium LLM models - maximize parallelism
 VRAM_GB_TOTAL=48
-OLLAMA_CONTEXT_LENGTH=8192
+VLLM_MAX_MODEL_LEN=16384
 
 # Example: 16GB VRAM GPU, small LLM models - conservative settings
 VRAM_GB_TOTAL=16
-OLLAMA_VRAM_GB_MODEL=4
+VLLM_VRAM_GB_MODEL=4
 
-# Example: Disable LLM parallelization via "ollama_chunk_workers=1" in json input of serverless endpoint (troubleshooting)
-ollama_chunk_workers=1
+# Example: Disable LLM parallelization via "vllm_chunk_workers=1" in json input of serverless endpoint (troubleshooting)
+vllm_chunk_workers=1
 ```
 
 ### Additional Configuration Variables
