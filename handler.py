@@ -589,6 +589,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("Marker Processing completed")
 
     # --- 3. vLLM LLM Post-processing (Parallel) ---
+    failed_post_processing = []
     if app_config.use_postprocess_llm and vllm_worker and processed_files:
         # Note: Marker worker processes have terminated, releasing their VRAM
         # vLLM now has full access to VRAM
@@ -603,11 +604,15 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
                 # Process files sequentially, with parallel chunk processing within each file
                 for processed_file_path in processed_files:
-                    vllm_worker.process_file(
+                    success = vllm_worker.process_file(
                         file_path=processed_file_path,
                         prompt_template=vllm_settings.vllm_block_correction_prompt,
                         max_chunk_workers=vllm_settings.vllm_chunk_workers
                     )
+
+                    if not success:
+                        failed_post_processing.append(processed_file_path.name)
+                        continue
 
                     extracted_images = list_extracted_images_for_output_file(app_config, processed_file_path)
                     if not extracted_images:
@@ -649,8 +654,9 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning(f"Failed to delete input file {file_to_process}: {e}")
 
     return {
-        "status": "completed",
-        "message": f"All input files of {input_path} processed."
+        "status": "completed" if not failed_post_processing else "partially_completed",
+        "message": f"Processed {len(processed_files)} files.",
+        "failures": failed_post_processing if failed_post_processing else None
     }
 
 if __name__ == "__main__":

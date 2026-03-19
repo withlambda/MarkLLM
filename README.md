@@ -62,13 +62,13 @@ This sequential execution model ensures that vLLM has full access to VRAM for lo
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/your-username/marker-ollama-worker.git
-    cd marker-ollama-worker
+    git clone https://github.com/your-username/marker-vllm-worker.git
+    cd marker-vllm-worker
     ```
 
 2.  Build the Docker image:
     ```bash
-    docker build -t marker-ollama-worker .
+    docker build -t marker-vllm-worker .
     ```
 
 3.  Push the image to a container registry (e.g., Docker Hub, GHCR).

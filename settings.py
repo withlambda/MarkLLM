@@ -111,32 +111,24 @@ class GlobalConfig(BaseSettings):
         """
         Loads the block correction prompt library from a JSON file.
         """
+        if not block_correction_prompts_file_path.exists():
+            logger.warning(f"Block correction prompt catalog not found at {block_correction_prompts_file_path}. Using empty library.")
+            return {}
         try:
-            if not block_correction_prompts_file_path.exists():
-                logger.warning(f"Block correction prompt file not found: {block_correction_prompts_file_path}")
-                raise FileNotFoundError(f"Block correction prompt file not found: {block_correction_prompts_file_path}")
-
             with open(block_correction_prompts_file_path, 'r', encoding=file_encoding) as f:
                 data = json.load(f)
 
-            block_correction_prompt_library: dict[str, str] = {}
-
-            # Build dictionary: key -> prompt
-            for entry in data.get("prompts", []):
-                key = entry.get("key")
-                prompt = entry.get("prompt")
-                if key and prompt:
-                    block_correction_prompt_library[key] = prompt
+            block_correction_prompt_library: dict[str, str] = {
+                e["key"]: e["prompt"]
+                for e in data.get("prompts", [])
+                if "key" in e and "prompt" in e
+            }
 
             logger.info(f"Loaded {len(block_correction_prompt_library)} block correction prompts from catalog")
-
             return block_correction_prompt_library
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse block correction prompts JSON: {e}")
-            raise e
         except Exception as e:
-            logger.error(f"Failed to load block correction prompts: {e}")
-            raise e
+            logger.error(f"Failed to load block correction prompt catalog: {e}")
+            return {}
 
 
 

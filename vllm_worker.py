@@ -519,6 +519,11 @@ class VllmWorker:
             "subject and context. Output only the description text."
         )
 
+        # Combine hardcoded instruction with user prompt template
+        user_instruction = "Provide a precise and concise description of this image."
+        if prompt_template:
+            user_instruction = f"{prompt_template}\n\n{user_instruction}"
+
         try:
             # Read and base64-encode the image
             image_data = image_path.read_bytes()
@@ -552,12 +557,12 @@ class VllmWorker:
                             },
                             {
                                 "type": "text",
-                                "text": "Provide a precise and concise description of this image.",
+                                "text": user_instruction,
                             },
                         ],
                     },
                 ],
-                max_tokens=self.settings.vllm_max_model_len,
+                max_tokens=1024, # Optimized default for vision tasks
             )
 
             content = response.choices[0].message.content
@@ -619,14 +624,17 @@ class VllmWorker:
         while time.time() < deadline:
             # Check if subprocess has exited
             if self.process is not None and self.process.poll() is not None:
-                # Capture any remaining stderr/stdout for diagnostics
+                returncode = self.process.returncode
                 output = ""
-                if self.process.stdout:
-                    output = self.process.stdout.read()
+                try:
+                    # Capture any remaining output without blocking
+                    stdout, _ = self.process.communicate(timeout=2.0)
+                    output = stdout if stdout else ""
+                except Exception:
+                    pass
                 self._cleanup_process()
                 raise RuntimeError(
-                    f"vLLM server exited prematurely (exit code: {self.process.returncode if self.process else 'N/A'}). "
-                    f"Output:\n{output}"
+                    f"vLLM server exited prematurely (exit code: {returncode}). Output:\n{output}"
                 )
 
             try:
@@ -642,12 +650,16 @@ class VllmWorker:
 
         # Timeout reached — collect subprocess output and terminate
         output = ""
-        if self.process is not None and self.process.stdout:
-            output = self.process.stdout.read()
+        if self.process is not None:
+            try:
+                # Capture output without blocking
+                stdout, _ = self.process.communicate(timeout=2.0)
+                output = stdout if stdout else ""
+            except Exception:
+                pass
         self.stop_server()
         raise RuntimeError(
-            f"vLLM health check timed out after {self.settings.vllm_startup_timeout}s. "
-            f"Server output:\n{output}"
+            f"vLLM health check timed out after {self.settings.vllm_startup_timeout}s. Output:\n{output}"
         )
 
     async def _maybe_restart_server(self) -> None:
