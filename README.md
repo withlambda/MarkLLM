@@ -381,6 +381,8 @@ The worker can be configured using environment variables. For `VllmSettings` and
 | Variable                                 | Description                                                | Default                                          |
 |:-----------------------------------------|:-----------------------------------------------------------|:-------------------------------------------------|
 | `VOLUME_ROOT_MOUNT_PATH`                 | Base path for storage (Required).                          | **None** (Must be set)                           |
+| `VRAM_GB_TOTAL`                         | Total VRAM available on your GPU (Required).               | **None** (Must be set)                           |
+| `VRAM_GB_RESERVE`                       | VRAM to reserve for system/other processes (GB).           | `4`                                              |
 | `USE_POSTPROCESS_LLM`                    | Enable LLM post-processing for the output results.         | `true`                                           |
 | `CLEANUP_OUTPUT_DIR_BEFORE_START`        | Delete output directory before starting.                   | `false`                                          |
 | `VLLM_MODEL_PATH`                        | Path to model weights on disk (Required).                  | **None** (Must be set)                           |
@@ -400,6 +402,10 @@ The worker can be configured using environment variables. For `VllmSettings` and
 | `VLLM_IMAGE_DESCRIPTION_PROMPT`          | Custom prompt for extracted image descriptions.            | (Optional)                                       |
 | `VLLM_BLOCK_CORRECTION_PROMPT_KEY`       | Key into the block correction prompt catalog.              | (Optional)                                       |
 | `VLLM_BLOCK_CORRECTION_PROMPT`           | Custom block correction prompt override.                   | (Optional)                                       |
+| `BLOCK_CORRECTION_PROMPT_FILE_NAME`      | Filename for the prompt catalog JSON.                      | `block_correction_prompts.json`                  |
+| `IMAGE_DESCRIPTION_SECTION_HEADING`      | Heading for the fallback image description section.        | `## Extracted Image Descriptions`                |
+| `IMAGE_DESCRIPTION_HEADING`              | Marker at the beginning of an image description.           | `**[BEGIN IMAGE DESCRIPTION]**`                  |
+| `IMAGE_DESCRIPTION_END`                  | Marker at the end of an image description.                 | `**[END IMAGE DESCRIPTION]**`                    |
 | `HF_HOME`                                | Path to Hugging Face cache.                                | `${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache`    |
 | `MARKER_DEBUG`                           | Enable debug mode.                                         | `False`                                          |
 | `MARKER_WORKERS`                         | Number of Marker workers (env-level default).              | `auto`                                           |
@@ -418,11 +424,12 @@ The worker includes adaptive parallelization to maximize GPU utilization (optimi
 
 | Variable                    | Description                                                                                      | Default   | Recommended Range |
 |:----------------------------|:-------------------------------------------------------------------------------------------------|:----------|:------------------|
-| `VRAM_GB_TOTAL`             | Total VRAM available on your GPU (used for auto-tuning worker counts).                           | `24`      | `8-80`            |
+| `VRAM_GB_TOTAL`             | Total VRAM available on your GPU (Required).                                                     | **None**  | `8-80`            |
+| `VRAM_GB_RESERVE`           | VRAM to reserve for system/other processes (GB).                                                 | `4`       | `1-8`             |
 | `VLLM_CHUNK_SIZE`           | Tokens per chunk for LLM processing. Smaller = more parallelism, larger = better context.        | `4000`    | `2000-8000`       |
 | `MARKER_VRAM_GB_PER_WORKER` | Estimated VRAM per Marker worker (GB). Used for auto-calculating `marker_workers`.               | `5`       | `3-6`             |
 | `VLLM_MAX_MODEL_LEN`       | Max context/sequence length (tokens). Used for auto-calculating `VLLM_MAX_NUM_SEQS`.             | `16384`   | `2048-32768`      |
-| `VRAM_GB_PER_TOKEN_FACTOR`  | VRAM (GB) per token. Used for auto-calculating `VLLM_MAX_NUM_SEQS` (default: 0.00013).           | `0.00013` | `0.0001-0.0005`   |
+| `VRAM_GB_PER_TOKEN_FACTOR`  | VRAM (GB) per token. Used for auto-calculating `VLLM_MAX_NUM_SEQS`.                              | `0.00013` | `0.0001-0.0005`   |
 | `VLLM_VRAM_GB_MODEL`        | VRAM (GB) consumed by the model. Used for auto-calculating `VLLM_MAX_NUM_SEQS`.                  | (Required)| `2-16`            |
 | `VLLM_MAX_RETRIES`          | Maximum retries for LLM chunk processing on transient/recoverable errors.                        | `3`       | `1-10`            |
 | `VLLM_RETRY_DELAY`          | Base delay (seconds) for exponential backoff between retries.                                    | `2.0`     | `1.0-5.0`         |
@@ -436,6 +443,7 @@ When set to `auto` (default), the worker automatically optimizes parallelism bas
 **vLLM Concurrency**:
 - `VLLM_MAX_NUM_SEQS` is calculated based on available VRAM and context window size:
   `max_num_seqs = floor((TOTAL_VRAM - VRAM_RESERVE - VLLM_VRAM_GB_MODEL) / (VRAM_GB_PER_TOKEN_FACTOR * VLLM_MAX_MODEL_LEN))`
+- **Precise Token Counting**: Uses the `tiktoken` library to accurately measure chunk sizes for OpenAI-compatible models, ensuring optimal context window utilization.
 - `vllm_chunk_workers` (async tasks) defaults to 16, controlling parallel chunk processing.
 - The vLLM server is started as a subprocess and monitored via a health check endpoint with a configurable startup timeout (`VLLM_STARTUP_TIMEOUT`).
 
