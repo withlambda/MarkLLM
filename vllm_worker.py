@@ -217,12 +217,12 @@ class VllmWorker:
         concurrently using ``asyncio``.
 
         If *prompt_template* is ``None`` or empty, OCR correction is skipped
-        entirely and the original text is returned unchanged (a warning is logged).
+        entirely, and the original text is returned unchanged (a warning is logged).
 
         Args:
             text: The full document text to process.
             prompt_template: System prompt for correction.  When ``None`` or
-                empty the correction phase is skipped.
+                 empty, the correction phase is skipped.
             max_chunk_workers: Maximum number of concurrent async tasks.
 
         Returns:
@@ -358,26 +358,26 @@ class VllmWorker:
         succeeded = 0
         failed = 0
 
-        async def _bounded_process(idx: int, chunk: str) -> Tuple[int, str]:
+        async def _bounded_process(index: int, chunk: str) -> Tuple[int, str]:
             """
             Process a single chunk with semaphore-based concurrency control.
 
             Args:
-                idx: Original index of the chunk.
+                index: Original index of the chunk.
                 chunk: The text content of the chunk.
 
             Returns:
                 Tuple containing the original index and the processed text.
             """
             async with semaphore:
-                result = await self._process_single_chunk_async(chunk, system_prompt, idx)
-                return idx, result
+                corrected_chunk = await self._process_single_chunk_async(chunk, system_prompt, index)
+                return index, corrected_chunk
 
-        tasks = [_bounded_process(i, c) for i, c in enumerate(chunks)]
+        tasks = [_bounded_process(index, chunk) for index, chunk in enumerate(chunks)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         corrected: List[str] = list(chunks)  # fallback copy
-        for i, result in enumerate(results):
+        for result in results:
             if isinstance(result, Exception):
                 logger.error(f"Async chunk task failed: {result}")
                 failed += 1
