@@ -208,6 +208,7 @@ class VllmSettings(BaseSettings):
         vllm_block_correction_prompt_key (str): Key into the prompt library (optional).
         vllm_block_correction_prompt (str): Custom block correction prompt override (optional).
         vllm_image_description_prompt (str): Custom vision prompt for image descriptions (optional).
+        vllm_cpu (bool): Whether to run vLLM on CPU (default: False).
     """
     model_config = SettingsConfigDict(env_prefix='VLLM_', populate_by_name=True, extra='ignore')
 

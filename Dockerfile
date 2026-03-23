@@ -14,8 +14,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # 1. ARG SETUP
-ARG PYTORCH_VERSION=2.8.0
-ARG CUDA_VERSION=12.8
+ARG PYTORCH_VERSION=2.10.0
+ARG CUDA_VERSION=13.0
 ARG CUDNN_VERSION=9
 ARG DOWNLOAD_MARKER_MODELS="false"
 ARG BASE_IMAGE=pytorch/pytorch:${PYTORCH_VERSION}-cuda${CUDA_VERSION}-cudnn${CUDNN_VERSION}-runtime
@@ -53,7 +53,7 @@ RUN mkdir -p ${XDG_CACHE_HOME} && \
     python3-dev \
     gosu \
     && pip install --no-cache-dir pip \
-    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements.txt --use-deprecated=legacy-resolver \
     && python3 -c "from marker.util import assign_config, download_font; download_font();" \
     && if [ "${DOWNLOAD_MARKER_MODELS}" = "true" ]; then \
     	python3 -c "from marker.models import create_model_dict; create_model_dict()"; \
