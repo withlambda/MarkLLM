@@ -22,6 +22,7 @@ API communication for OCR error correction and image description generation.
 
 import asyncio
 import base64
+import os
 import logging
 import random
 import signal
@@ -147,11 +148,16 @@ class VllmWorker:
         logger.info(f"Starting vLLM server: {' '.join(cmd)}")
 
         # --- Launch subprocess ---
+        env = os.environ.copy()
+        if self.settings.vllm_cpu:
+            env["VLLM_TARGET_DEVICE"] = "cpu"
+
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            env=env,
         )
         logger.info(f"vLLM subprocess started (PID {self.process.pid})")
 
@@ -639,15 +645,22 @@ class VllmWorker:
         """
         cmd = [
             "vllm", "serve",
-            str(self.settings.vllm_model_path),
+            str(self.settings.vllm_model_path or self.settings.vllm_model),
             "--port", str(self.settings.vllm_port),
-            "--gpu-memory-utilization", str(self.settings.vllm_gpu_util),
-            "--max-model-len", str(self.settings.vllm_max_model_len),
-            "--max-num-seqs", str(self.settings.vllm_max_num_seqs),
         ]
 
+        if self.settings.vllm_cpu:
+            cmd.extend(["--device", "cpu"])
+        else:
+            cmd.extend(["--gpu-memory-utilization", str(self.settings.vllm_gpu_util)])
+
+        cmd.extend([
+            "--max-model-len", str(self.settings.vllm_max_model_len),
+            "--max-num-seqs", str(self.settings.vllm_max_num_seqs),
+        ])
+
         # If the model name differs from the path, pass --served-model-name
-        if self.settings.vllm_model:
+        if self.settings.vllm_model_path:
             cmd.extend(["--served-model-name", self.settings.vllm_model])
 
         return cmd
