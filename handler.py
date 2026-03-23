@@ -477,13 +477,15 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     job_input = job.get("input", {})
 
     # Extract structured settings
-    vllm_settings = extract_vllm_settings_from_job_input(app_config=app_config, job_input=job_input)
+    vllm_settings: Optional[VllmSettings] = None
+    if app_config.use_postprocess_llm:
+        vllm_settings = extract_vllm_settings_from_job_input(app_config=app_config, job_input=job_input)
     marker_settings = extract_marker_settings_from_job_input(job_input=job_input)
 
     vllm_worker: Optional[VllmWorker] = None
 
     # --- 1. vLLM Worker Setup (Pre-processing) ---
-    if app_config.use_postprocess_llm:
+    if app_config.use_postprocess_llm and vllm_settings:
         vllm_worker = VllmWorker(settings=vllm_settings)
 
     # Read base paths from global config
