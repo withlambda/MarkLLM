@@ -34,6 +34,11 @@ import runpod
 import torch
 import torch.multiprocessing as mp
 
+from marker.converters.pdf import PdfConverter
+from marker.models import create_model_dict
+from marker.config.parser import ConfigParser
+from marker.output import text_from_rendered
+
 # Ensure threads don't contend - important for multiprocessing
 os.environ["MKL_DYNAMIC"] = "FALSE"
 os.environ["OMP_DYNAMIC"] = "FALSE"
@@ -50,10 +55,6 @@ except RuntimeError:
     # Already set, which is fine
     pass
 
-from marker.converters.pdf import PdfConverter
-from marker.models import create_model_dict
-from marker.config.parser import ConfigParser
-from marker.output import text_from_rendered
 from vllm_worker import VllmWorker
 from settings import MarkerSettings, VllmSettings, GlobalConfig
 from utils import (
