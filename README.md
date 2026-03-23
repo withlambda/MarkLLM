@@ -400,6 +400,7 @@ The worker can be configured using environment variables. For `VllmSettings` and
 | `VLLM_MAX_NUM_SEQS`                      | Max concurrent sequences (auto-calculated from VRAM).      | `16`                                             |
 | `VLLM_STARTUP_TIMEOUT`                   | Seconds to wait for vLLM health check on startup.          | `120`                                            |
 | `VLLM_VRAM_RECOVERY_DELAY`               | Seconds to wait after Marker before starting vLLM.         | `10`                                             |
+| `VLLM_CPU`                               | Run vLLM on CPU (for testing/non-GPU environments).        | `false`                                          |
 | `VLLM_MAX_RETRIES`                       | Maximum retries for failed API calls.                      | `3`                                              |
 | `VLLM_RETRY_DELAY`                       | Delay between retries in seconds.                          | `2.0`                                            |
 | `VLLM_CHUNK_SIZE`                        | Size of text chunks in tokens for correction phase.        | `4000`                                           |
@@ -517,18 +518,19 @@ The following variables can also be set to further customize the environment, th
 
 **Tools / Performance**
 
-| Tool             | Variable                          | Description                                       | Default                  |
-|:-----------------|:----------------------------------|:--------------------------------------------------|:-------------------------|
-| **Python**       | `PYTHONUNBUFFERED`                | Force unbuffered stdout/stderr.                   | `1`                      |
-| **Hugging Face** | `HF_HUB_OFFLINE`                  | Run Hugging Face Hub in offline mode.             | `1`                      |
-| **vLLM**         | `VLLM_HOST`                       | Host URL where vLLM server runs.                  | `http://127.0.0.1:8000`  |
-| **vLLM**         | `VLLM_PORT`                       | Port for the vLLM server.                         | `8000`                   |
-| **vLLM**         | `VLLM_IMAGE_DESCRIPTION_PROMPT`   | Prompt template for extracted image descriptions. | (Optional)               |
-| **PyTorch**      | `PYTORCH_ENABLE_MPS_FALLBACK`     | Fallback to CPU if MPS ops aren't supported.      | `1`                      |
-| **PyTorch**      | `TORCH_NUM_THREADS`               | Threads for intraop parallelism on CPU.           | `1`                      |
-| **PyTorch**      | `OMP_NUM_THREADS`                 | Threads for OpenMP parallel regions.              | `1`                      |
-| **PyTorch**      | `MKL_NUM_THREADS`                 | Threads for Intel MKL library.                    | `1`                      |
-| **PyTorch**      | `TORCH_DEVICE`                    | Device to use (`cpu`, `cuda`, `mps`).             | Auto-detected            |
+| Tool                    | Variable                        | Description                                                 | Default                 |
+|:------------------------|:--------------------------------|:------------------------------------------------------------|:------------------------|
+| **Python**              | `PYTHONUNBUFFERED`              | Force unbuffered stdout/stderr.                             | `1`                     |
+| **Hugging Face**        | `HF_HUB_OFFLINE`                | Run Hugging Face Hub in offline mode.                       | `1`                     |
+| **Transformer Library** | `TRANSFORMERS_OFFILNE`          | Prevents the Transformers Library to download model weights | `1`                     | 
+| **vLLM**                | `VLLM_HOST`                     | Host URL where vLLM server runs.                            | `http://127.0.0.1:8000` |
+| **vLLM**                | `VLLM_PORT`                     | Port for the vLLM server.                                   | `8000`                  |
+| **vLLM**                | `VLLM_IMAGE_DESCRIPTION_PROMPT` | Prompt template for extracted image descriptions.           | (Optional)              |
+| **PyTorch**             | `PYTORCH_ENABLE_MPS_FALLBACK`   | Fallback to CPU if MPS ops aren't supported.                | `1`                     |
+| **PyTorch**             | `TORCH_NUM_THREADS`             | Threads for intraop parallelism on CPU.                     | `1`                     |
+| **PyTorch**             | `OMP_NUM_THREADS`               | Threads for OpenMP parallel regions.                        | `1`                     |
+| **PyTorch**             | `MKL_NUM_THREADS`               | Threads for Intel MKL library.                              | `1`                     |
+| **PyTorch**             | `TORCH_DEVICE`                  | Device to use (`cpu`, `cuda`, `mps`).                       | Auto-detected           |
 
 **Marker Specific**
 

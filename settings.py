@@ -237,6 +237,7 @@ class VllmSettings(BaseSettings):
     vllm_block_correction_prompt_key: Optional[str] = Field(None, validation_alias="VLLM_BLOCK_CORRECTION_PROMPT_KEY")
     vllm_block_correction_prompt: Optional[str] = Field(None, validation_alias="VLLM_BLOCK_CORRECTION_PROMPT")
     vllm_image_description_prompt: Optional[str] = Field(None, validation_alias="VLLM_IMAGE_DESCRIPTION_PROMPT")
+    vllm_cpu: bool = Field(False, validation_alias="VLLM_CPU")
 
     def __init__(
         self,

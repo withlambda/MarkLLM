@@ -6,6 +6,7 @@ This file, `test/tools.env`, contains environment variable overrides for common 
 ## Variables
 - `PYTHONUNBUFFERED`: `1` (ensures logs are immediately visible).
 - `HF_HUB_OFFLINE`: `1` (prevents external network calls for model metadata).
+- `TRANSFORMERS_OFFLINE`: `1` (prevents external network calls from the transformer library for model weights).
 - `VLLM_PORT`: `8000`.
 - `PYTORCH_ENABLE_MPS_FALLBACK`: `1`.
 - `TORCH_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`: `1` (limits CPU thread usage during tests).
