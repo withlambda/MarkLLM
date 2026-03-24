@@ -703,8 +703,16 @@ class VllmWorker:
                     # Capture any remaining output without blocking
                     stdout, _ = self.process.communicate(timeout=2.0)
                     output = stdout if stdout else ""
-                except Exception:
-                    pass
+                except subprocess.TimeoutExpired:
+                    logger.debug(
+                        "Timed out while capturing vLLM server output after premature exit; "
+                        "proceeding without additional output."
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "Unexpected error while capturing vLLM server output after premature exit: %s",
+                        exc,
+                    )
                 self._cleanup_process()
                 raise RuntimeError(
                     f"vLLM server exited prematurely (exit code: {return_code}). Output:\n{output}"
@@ -728,8 +736,16 @@ class VllmWorker:
                 # Capture output without blocking
                 stdout, _ = self.process.communicate(timeout=2.0)
                 output = stdout if stdout else ""
-            except Exception:
-                pass
+            except subprocess.TimeoutExpired:
+                logger.debug(
+                    "Timed out while capturing vLLM server output after startup timeout; "
+                    "proceeding without additional output."
+                )
+            except Exception as exc:
+                logger.debug(
+                    "Unexpected error while capturing vLLM server output after startup timeout: %s",
+                    exc,
+                )
         self.stop_server()
         raise RuntimeError(
             f"vLLM health check timed out after {self.settings.vllm_startup_timeout}s. Output:\n{output}"
@@ -772,8 +788,10 @@ class VllmWorker:
             try:
                 if self.process.stdout:
                     self.process.stdout.close()
-            except Exception:
-                pass
+            except Exception as e:
+                # Best-effort cleanup: failure to close stdout should not
+                # prevent process cleanup, but we log it for debugging.
+                logger.debug("Failed to close vLLM server stdout during cleanup: %s", e)
             self.process = None
 
     # ------------------------------------------------------------------
