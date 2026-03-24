@@ -198,6 +198,7 @@ The following `marker_`-prefixed keys can be used in the `input` section of the 
 | `marker_processors`               | Comma-separated list of marker processors to run.               | `None`     |
 | `marker_output_format`            | The format of the output (markdown, json, etc.).                | `markdown` |
 | `marker_maxtasksperchild`         | Tasks per worker before recycling (prevents memory leaks).      | `10`       |
+| `marker_disable_maxtasksperchild` | Disable automatic recycling of tasks for the child process.     | `false`    |
 
 #### vLLM Configuration Overrides
 
@@ -208,7 +209,7 @@ The following `vllm_`-prefixed keys can be used in the `input` section of the jo
 | `vllm_model`                       | Model name for API calls (derived from path if unset).             |
 | `vllm_host`                        | Host URL where vLLM server runs.                                   |
 | `vllm_port`                        | Port for the vLLM server.                                          |
-| `vllm_gpu_util`                    | Maximum GPU memory fraction for vLLM (0.0–1.0).                   |
+| `vllm_gpu_util`                    | Maximum GPU memory fraction for vLLM (0.0–1.0).                    |
 | `vllm_max_model_len`               | Maximum context/sequence length (tokens).                          |
 | `vllm_max_num_seqs`                | Max concurrent sequences (auto-calculated from VRAM).              |
 | `vllm_startup_timeout`             | Seconds to wait for vLLM health check on startup.                  |
@@ -385,64 +386,65 @@ Output Formatting: Provide ONLY the corrected text in clean Markdown.
 
 The worker can be configured using environment variables. For `VllmSettings` and `MarkerSettings`, properties can be set using the `VLLM_` or `MARKER_` prefix respectively (e.g., `MARKER_WORKERS`, `VLLM_MAX_MODEL_LEN`).
 
-| Variable                                 | Description                                                | Default                                          |
-|:-----------------------------------------|:-----------------------------------------------------------|:-------------------------------------------------|
-| `VOLUME_ROOT_MOUNT_PATH`                 | Base path for storage (Required).                          | **None** (Must be set)                           |
-| `VRAM_GB_TOTAL`                         | Total VRAM available on your GPU (Required).               | **None** (Must be set)                           |
-| `VRAM_GB_RESERVE`                       | VRAM to reserve for system/other processes (GB).           | `4`                                              |
-| `USE_POSTPROCESS_LLM`                    | Enable LLM post-processing for the output results.         | `true`                                           |
-| `CLEANUP_OUTPUT_DIR_BEFORE_START`        | Delete output directory before starting.                   | `false`                                          |
-| `VLLM_MODEL_PATH`                        | Path to model weights on disk (Required).                  | **None** (Must be set)                           |
-| `VLLM_MODEL`                             | Model name for API calls (derived from path if unset).     | (Optional)                                       |
-| `VLLM_VRAM_GB_MODEL`                     | VRAM consumed by the model in GB (Required).               | **None** (Must be set)                           |
-| `VLLM_HOST`                              | Host URL where vLLM server runs.                           | `http://127.0.0.1:8000`                          |
-| `VLLM_PORT`                              | Port for the vLLM server.                                  | `8000`                                           |
-| `VLLM_GPU_UTIL`                          | Maximum GPU memory fraction for vLLM (0.0–1.0).           | `0.90`                                           |
-| `VLLM_MAX_MODEL_LEN`                     | Maximum context/sequence length (tokens).                  | `16384`                                          |
-| `VLLM_MAX_NUM_SEQS`                      | Max concurrent sequences (auto-calculated from VRAM).      | `16`                                             |
-| `VLLM_STARTUP_TIMEOUT`                   | Seconds to wait for vLLM health check on startup.          | `120`                                            |
-| `VLLM_VRAM_RECOVERY_DELAY`               | Seconds to wait after Marker before starting vLLM.         | `10`                                             |
-| `VLLM_CPU`                               | Run vLLM on CPU (for testing/non-GPU environments).        | `false`                                          |
-| `VLLM_MAX_RETRIES`                       | Maximum retries for failed API calls.                      | `3`                                              |
-| `VLLM_RETRY_DELAY`                       | Delay between retries in seconds.                          | `2.0`                                            |
-| `VLLM_CHUNK_SIZE`                        | Size of text chunks in tokens for correction phase.        | `4000`                                           |
-| `VLLM_CHUNK_WORKERS`                     | Async tasks for parallel chunk processing.                 | `16`                                             |
-| `VLLM_IMAGE_DESCRIPTION_PROMPT`          | Custom prompt for extracted image descriptions.            | (Optional)                                       |
-| `VLLM_BLOCK_CORRECTION_PROMPT_KEY`       | Key into the block correction prompt catalog.              | (Optional)                                       |
-| `VLLM_BLOCK_CORRECTION_PROMPT`           | Custom block correction prompt override.                   | (Optional)                                       |
-| `BLOCK_CORRECTION_PROMPT_FILE_NAME`      | Filename for the prompt catalog JSON.                      | `block_correction_prompts.json`                  |
-| `IMAGE_DESCRIPTION_SECTION_HEADING`      | Heading for the fallback image description section.        | `## Extracted Image Descriptions`                |
-| `IMAGE_DESCRIPTION_HEADING`              | Marker at the beginning of an image description.           | `**[BEGIN IMAGE DESCRIPTION]**`                  |
-| `IMAGE_DESCRIPTION_END`                  | Marker at the end of an image description.                 | `**[END IMAGE DESCRIPTION]**`                    |
-| `HF_HOME`                                | Path to Hugging Face cache.                                | `${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache`    |
-| `MARKER_DEBUG`                           | Enable debug mode.                                         | `False`                                          |
-| `MARKER_WORKERS`                         | Number of Marker workers (env-level default).              | `auto`                                           |
-| `MARKER_PAGINATE_OUTPUT`                 | Whether to paginate output (env-level default).            | `false`                                          |
-| `MARKER_FORCE_OCR`                       | Force OCR even if text is present.                         | `false`                                          |
-| `MARKER_DISABLE_MULTIPROCESSING`         | Disable internal Marker multiprocessing.                   | `false`                                          |
-| `MARKER_DISABLE_IMAGE_EXTRACTION`        | Disable extraction of images.                              | `false`                                          |
-| `MARKER_PAGE_RANGE`                      | Default page range to convert.                             | `None`                                           |
-| `MARKER_PROCESSORS`                      | Default processors to run.                                 | `None`                                           |
-| `MARKER_OUTPUT_FORMAT`                   | Default output format (markdown, json, etc.).              | `markdown`                                       |
-| `MARKER_MAXTASKSPERCHILD`                | Tasks per worker before recycling (prevents memory leaks). | `10`                                             |
+| Variable                            | Description                                                 | Default                                       |
+|:------------------------------------|:------------------------------------------------------------|:----------------------------------------------|
+| `VOLUME_ROOT_MOUNT_PATH`            | Base path for storage (Required).                           | **None** (Must be set)                        |
+| `VRAM_GB_TOTAL`                     | Total VRAM available on your GPU (Required).                | **None** (Must be set)                        |
+| `VRAM_GB_RESERVE`                   | VRAM to reserve for system/other processes (GB).            | `4`                                           |
+| `USE_POSTPROCESS_LLM`               | Enable LLM post-processing for the output results.          | `true`                                        |
+| `CLEANUP_OUTPUT_DIR_BEFORE_START`   | Delete output directory before starting.                    | `false`                                       |
+| `VLLM_MODEL_PATH`                   | Path to model weights on disk (Required).                   | **None** (Must be set)                        |
+| `VLLM_MODEL`                        | Model name for API calls (derived from path if unset).      | (Optional)                                    |
+| `VLLM_VRAM_GB_MODEL`                | VRAM consumed by the model in GB (Required).                | **None** (Must be set)                        |
+| `VLLM_HOST`                         | Host URL where vLLM server runs.                            | `http://127.0.0.1:8000`                       |
+| `VLLM_PORT`                         | Port for the vLLM server.                                   | `8000`                                        |
+| `VLLM_GPU_UTIL`                     | Maximum GPU memory fraction for vLLM (0.0–1.0).             | `0.85`                                        |
+| `VLLM_MAX_MODEL_LEN`                | Maximum context/sequence length (tokens).                   | `8192`                                        |
+| `VLLM_MAX_NUM_SEQS`                 | Max concurrent sequences (auto-calculated from VRAM).       | `16`                                          |
+| `VLLM_STARTUP_TIMEOUT`              | Seconds to wait for vLLM health check on startup.           | `120`                                         |
+| `VLLM_VRAM_RECOVERY_DELAY`          | Seconds to wait after Marker before starting vLLM.          | `10`                                          |
+| `VLLM_CPU`                          | Run vLLM on CPU (for testing/non-GPU environments).         | `false`                                       |
+| `VLLM_MAX_RETRIES`                  | Maximum retries for failed API calls.                       | `3`                                           |
+| `VLLM_RETRY_DELAY`                  | Delay between retries in seconds.                           | `2.0`                                         |
+| `VLLM_CHUNK_SIZE`                   | Size of text chunks in tokens for correction phase.         | `4000`                                        |
+| `VLLM_CHUNK_WORKERS`                | Async tasks for parallel chunk processing.                  | `16`                                          |
+| `VLLM_IMAGE_DESCRIPTION_PROMPT`     | Custom prompt for extracted image descriptions.             | (Optional)                                    |
+| `VLLM_BLOCK_CORRECTION_PROMPT_KEY`  | Key into the block correction prompt catalog.               | (Optional)                                    |
+| `VLLM_BLOCK_CORRECTION_PROMPT`      | Custom block correction prompt override.                    | (Optional)                                    |
+| `BLOCK_CORRECTION_PROMPT_FILE_NAME` | Filename for the prompt catalog JSON.                       | `block_correction_prompts.json`               |
+| `IMAGE_DESCRIPTION_SECTION_HEADING` | Heading for the fallback image description section.         | `## Extracted Image Descriptions`             |
+| `IMAGE_DESCRIPTION_HEADING`         | Marker at the beginning of an image description.            | `**[BEGIN IMAGE DESCRIPTION]**`               |
+| `IMAGE_DESCRIPTION_END`             | Marker at the end of an image description.                  | `**[END IMAGE DESCRIPTION]**`                 |
+| `HF_HOME`                           | Path to Hugging Face cache.                                 | `${VOLUME_ROOT_MOUNT_PATH}/huggingface-cache` |
+| `MARKER_DEBUG`                      | Enable debug mode.                                          | `False`                                       |
+| `MARKER_WORKERS`                    | Number of Marker workers (env-level default).               | `auto`                                        |
+| `MARKER_PAGINATE_OUTPUT`            | Whether to paginate output (env-level default).             | `false`                                       |
+| `MARKER_FORCE_OCR`                  | Force OCR even if text is present.                          | `false`                                       |
+| `MARKER_DISABLE_MULTIPROCESSING`    | Disable internal Marker multiprocessing.                    | `false`                                       |
+| `MARKER_DISABLE_IMAGE_EXTRACTION`   | Disable extraction of images.                               | `false`                                       |
+| `MARKER_PAGE_RANGE`                 | Default page range to convert.                              | `None`                                        |
+| `MARKER_PROCESSORS`                 | Default processors to run.                                  | `None`                                        |
+| `MARKER_OUTPUT_FORMAT`              | Default output format (markdown, json, etc.).               | `markdown`                                    |
+| `MARKER_MAXTASKSPERCHILD`           | Tasks per worker before recycling (prevents memory leaks).  | `10`                                          |
+| `MARKER_DISBABLE_MAXTASKSPERCHILD`  | Disable automatic recycling of tasks for the child process. | `false`                                       |
 
 ### Performance Tuning Variables
 
 The worker includes adaptive parallelization to maximize GPU utilization (optimized for 24GB VRAM). These settings are automatically calculated based on workload but can be manually overridden.
 
-| Variable                    | Description                                                                                      | Default   | Recommended Range |
-|:----------------------------|:-------------------------------------------------------------------------------------------------|:----------|:------------------|
-| `VRAM_GB_TOTAL`             | Total VRAM available on your GPU (Required).                                                     | **None**  | `8-80`            |
-| `VRAM_GB_RESERVE`           | VRAM to reserve for system/other processes (GB).                                                 | `4`       | `1-8`             |
-| `VLLM_CHUNK_SIZE`           | Tokens per chunk for LLM processing. Smaller = more parallelism, larger = better context.        | `4000`    | `2000-8000`       |
-| `MARKER_VRAM_GB_PER_WORKER` | Estimated VRAM per Marker worker (GB). Used for auto-calculating `marker_workers`.               | `5`       | `3-6`             |
-| `VLLM_MAX_MODEL_LEN`       | Max context/sequence length (tokens). Used for auto-calculating `VLLM_MAX_NUM_SEQS`.             | `16384`   | `2048-32768`      |
-| `VRAM_GB_PER_TOKEN_FACTOR`  | VRAM (GB) per token. Used for auto-calculating `VLLM_MAX_NUM_SEQS`.                              | `0.00013` | `0.0001-0.0005`   |
-| `VLLM_VRAM_GB_MODEL`        | VRAM (GB) consumed by the model. Used for auto-calculating `VLLM_MAX_NUM_SEQS`.                  | (Required)| `2-16`            |
-| `VLLM_MAX_RETRIES`          | Maximum retries for LLM chunk processing on transient/recoverable errors.                        | `3`       | `1-10`            |
-| `VLLM_RETRY_DELAY`          | Base delay (seconds) for exponential backoff between retries.                                    | `2.0`     | `1.0-5.0`         |
-| `VLLM_MAX_NUM_SEQS`         | Max concurrent sequences (auto-calculated from VRAM if unset).                                   | `16`      | `1-32`            |
-| `VLLM_GPU_UTIL`             | Maximum GPU memory fraction for vLLM.                                                            | `0.90`    | `0.5-0.95`        |
+| Variable                    | Description                                                                               | Default    | Recommended Range |
+|:----------------------------|:------------------------------------------------------------------------------------------|:-----------|:------------------|
+| `VRAM_GB_TOTAL`             | Total VRAM available on your GPU (Required).                                              | **None**   | `8-80`            |
+| `VRAM_GB_RESERVE`           | VRAM to reserve for system/other processes (GB).                                          | `4`        | `1-8`             |
+| `VLLM_CHUNK_SIZE`           | Tokens per chunk for LLM processing. Smaller = more parallelism, larger = better context. | `4000`     | `2000-8000`       |
+| `MARKER_VRAM_GB_PER_WORKER` | Estimated VRAM per Marker worker (GB). Used for auto-calculating `marker_workers`.        | `5`        | `3-6`             |
+| `VLLM_MAX_MODEL_LEN`        | Max context/sequence length (tokens). Used for auto-calculating `VLLM_MAX_NUM_SEQS`.      | `8192`     | `2048-32768`      |
+| `VRAM_GB_PER_TOKEN_FACTOR`  | VRAM (GB) per token. Used for auto-calculating `VLLM_MAX_NUM_SEQS`.                       | `0.00013`  | `0.0001-0.0005`   |
+| `VLLM_VRAM_GB_MODEL`        | VRAM (GB) consumed by the model. Used for auto-calculating `VLLM_MAX_NUM_SEQS`.           | (Required) | `2-16`            |
+| `VLLM_MAX_RETRIES`          | Maximum retries for LLM chunk processing on transient/recoverable errors.                 | `3`        | `1-10`            |
+| `VLLM_RETRY_DELAY`          | Base delay (seconds) for exponential backoff between retries.                             | `2.0`      | `1.0-5.0`         |
+| `VLLM_MAX_NUM_SEQS`         | Max concurrent sequences (auto-calculated from VRAM if unset).                            | `16`       | `1-32`            |
+| `VLLM_GPU_UTIL`             | Maximum GPU memory fraction for vLLM.                                                     | `0.85`     | `0.5-0.95`        |
 
 #### Adaptive Worker Scaling (Auto Mode)
 
@@ -492,7 +494,7 @@ For specific hardware or workloads, you can override auto-tuning:
 ```bash
 # Example: 48GB VRAM GPU, medium LLM models - maximize parallelism
 VRAM_GB_TOTAL=48
-VLLM_MAX_MODEL_LEN=16384
+VLLM_MAX_MODEL_LEN=8192
 
 # Example: 16GB VRAM GPU, small LLM models - conservative settings
 VRAM_GB_TOTAL=16
@@ -501,6 +503,73 @@ VLLM_VRAM_GB_MODEL=4
 # Example: Disable LLM parallelization via "vllm_chunk_workers=1" in json input of serverless endpoint (troubleshooting)
 vllm_chunk_workers=1
 ```
+
+### Recommended Environment Variables for ~24GB VRAM GPU Deployment
+
+The following environment variables are recommended for a cloud deployment with a single GPU and approximately 24GB VRAM. This configuration balances performance with stability for typical document processing workloads.
+
+| Variable                          | Tool              | Description                                                                                     | Recommended Value                                                       |
+|:----------------------------------|:------------------|:------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------|
+| `VOLUME_ROOT_MOUNT_PATH`          | Worker            | Base path for storage volume.                                                                   | `/workspace` (runpod.io pod) or `/runpod-volume` (runpod.io serverless) |
+| `VRAM_GB_TOTAL`                   | Worker            | Total VRAM available on the GPU.                                                                | `24`                                                                    |
+| `VRAM_GB_RESERVE`                 | Worker            | VRAM to reserve for system/other processes (GB).                                                | `4`                                                                     |
+| `USE_POSTPROCESS_LLM`             | Worker            | Enable LLM post-processing for output results.                                                  | `true`                                                                  |
+| `CLEANUP_OUTPUT_DIR_BEFORE_START` | Worker            | Delete output directory before starting new job.                                                | `false`                                                                 |
+| `VLLM_MODEL_PATH`                 | vLLM              | Path to model weights on disk (e.g., `/workspace/models/mistral-7b-instruct`).                  | (set to your model path, this or `VLLM_MODEL` is required)              |
+| `VLLM_MODEL`                      | vLLM              | Model name for API calls (auto-derived from path if unset).                                     | (this or `VLLM_MODEL_PATH` is required)                                 |
+| `VLLM_VRAM_GB_MODEL`              | vLLM              | VRAM consumed by the model in GB (7B model ~6-8GB).                                             | model dependent                                                         |
+| `VLLM_HOST`                       | vLLM              | Host URL where vLLM server runs.                                                                | `http://127.0.0.1`                                                      |
+| `VLLM_PORT`                       | vLLM              | Port for the vLLM server.                                                                       | `8000`                                                                  |
+| `VLLM_GPU_UTIL`                   | vLLM              | Maximum GPU memory fraction for vLLM (0.0–1.0).                                                 | `0.85`                                                                  |
+| `VLLM_MAX_MODEL_LEN`              | vLLM              | Maximum context/sequence length (tokens).                                                       | `8192`                                                                  |
+| `VLLM_MAX_NUM_SEQS`               | vLLM              | Max concurrent sequences (auto-calculated if unset).                                            | `16`                                                                    |
+| `VLLM_STARTUP_TIMEOUT`            | vLLM              | Seconds to wait for vLLM health check on startup.                                               | `120`                                                                   |
+| `VLLM_VRAM_RECOVERY_DELAY`        | vLLM              | Seconds to wait after Marker before starting vLLM.                                              | `10`                                                                    |
+| `VLLM_MAX_RETRIES`                | vLLM              | Maximum retries for failed API calls.                                                           | `3`                                                                     |
+| `VLLM_RETRY_DELAY`                | vLLM              | Delay between retries in seconds.                                                               | `2.0`                                                                   |
+| `VLLM_CHUNK_SIZE`                 | vLLM              | Size of text chunks in tokens for correction phase.                                             | `4000`                                                                  |
+| `VLLM_CHUNK_WORKERS`              | vLLM              | Async tasks for parallel chunk processing.                                                      | `16`                                                                    |
+| `HF_HOME`                         | Hugging Face      | Path to Hugging Face cache directory.                                                           | `<VOLUME_ROOT_MOUNT_PATH>/huggingface-cache`                            |
+| `HF_HUB_OFFLINE`                  | Hugging Face      | Run Hugging Face Hub in offline mode (prevents downloads).                                      | `1`                                                                     |
+| `TRANSFORMERS_OFFLINE`            | Transformers      | Prevents the Transformers library from downloading model weights.                               | `1`                                                                     |
+| `MODEL_CACHE_DIR`                 | Surya/Marker      | Cache directory for Surya/Marker models.                                                        | `<VOLUME_ROOT_MOUNT_PATH>/huggingface-cache/hub`                        |
+| (x) `OCR_ENGINE`                  | Marker/Surya      | OCR engine to use (e.g., `surya`, `tesseract`).                                                 | `surya`                                                                 |
+| (x) `RECOGNITION_BATCH_SIZE`      | Surya             | Batch size for text recognition inference (lower for VRAM constraints).                         | `128`                                                                   |
+| (x) `INFERENCE_RAM`               | Marker            | RAM (in GB) available for inference operations.                                                 | `20`                                                                    |
+| (x) `DTYPE`                       | Marker/Surya/vLLM | Data type for model inference (`float16`, `bfloat16`, `float32`).                               | `float16` (`bfloat16` on Ampere architecure (A10G/3090/4090))           |
+| `MARKER_DEBUG`                    | Marker            | Enable debug mode for detailed logging.                                                         | `false`                                                                 |
+| `MARKER_WORKERS`                  | Marker            | Number of Marker workers (auto-calculated if unset).                                            | `auto`                                                                  |
+| `MARKER_PAGINATE_OUTPUT`          | Marker            | Whether to paginate output.                                                                     | `false`                                                                 |
+| `MARKER_FORCE_OCR`                | Marker            | Force OCR even if text is present.                                                              | `false`                                                                 |
+| `MARKER_DISABLE_MULTIPROCESSING`  | Marker            | Disable internal Marker multiprocessing.                                                        | `true` (since multiprocessing is handled here directly)                 | 
+| `MARKER_DISABLE_IMAGE_EXTRACTION` | Marker            | Disable extraction of images from documents.                                                    | `false`                                                                 |
+| `MARKER_OUTPUT_FORMAT`            | Marker            | Default output format (markdown, json, etc.).                                                   | `markdown`                                                              |
+| `MARKER_MAXTASKSPERCHILD`         | Marker            | Tasks per worker before recycling (prevents memory leaks).                                      | `10`                                                                    |
+| `MARKER_VRAM_GB_PER_WORKER`       | Marker            | Estimated VRAM per Marker worker (GB) for auto-scaling.                                         | `5`                                                                     |
+| (x) `PYTORCH_CUDA_ALLOC_CONF`     | PyTorch           | CUDA memory allocator configuration (e.g., `expandable_segments:True` to reduce fragmentation). | `expandable_segments:True`                                              |
+| `PYTORCH_ENABLE_MPS_FALLBACK`     | PyTorch           | Fallback to CPU if MPS operations aren't supported.                                             | `1`                                                                     |
+| `TORCH_DEVICE`                    | PyTorch           | Device to use (`cpu`, `cuda`, `mps`) - auto-detected if unset.                                  | `cuda`                                                                  |
+| `TORCH_NUM_THREADS`               | PyTorch           | Threads for intraop parallelism on CPU.                                                         | `1`                                                                     |
+| `OMP_NUM_THREADS`                 | PyTorch           | Threads for OpenMP parallel regions.                                                            | `1`                                                                     |
+| `MKL_NUM_THREADS`                 | PyTorch           | Threads for Intel MKL library.                                                                  | `1`                                                                     |
+| (x) `NCCL_P2P_DISABLE`            | NCCL/PyTorch      | Disable peer-to-peer GPU communication (set to `1` for single-GPU setups).                      | `1`                                                                     |
+| `CUDA_VISIBLE_DEVICES`            | CUDA              | Specifies which GPU(s) to use (0-indexed).                                                      | `0`                                                                     |
+| `PYTHONUNBUFFERED`                | Python            | Force unbuffered stdout/stderr for real-time logging.                                           | `1`                                                                     |
+| `OUTPUT_ENCODING`                 | Marker            | Encoding for output text files.                                                                 | `utf-8`                                                                 |
+| `OUTPUT_IMAGE_FORMAT`             | Marker            | Format for extracted images (JPEG, PNG, etc.).                                                  | `JPEG`                                                                  |
+| `VRAM_GB_PER_TOKEN_FACTOR`        | Worker            | VRAM (GB) per token for auto-calculating vLLM concurrency.                                      | `0.00013`                                                               |
+
+**Notes:**
+
+- The environment variables marked with `(x)` should be first checked whether they should be set.
+- Set `VLLM_MODEL_PATH` to the absolute path where your model weights are stored.
+- Adjust `VLLM_VRAM_GB_MODEL` based on your specific model size (7B models typically use 6-8GB).
+- For models with larger context windows (16k+), increase `VLLM_MAX_MODEL_LEN` and reduce `VLLM_MAX_NUM_SEQS`.
+- The `MARKER_WORKERS` and `VLLM_MAX_NUM_SEQS` values are auto-calculated based on available VRAM when set to `auto`.
+- CPU thread counts (`TORCH_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`) should be adjusted based on your CPU core count (4 is suitable for 8-16 core systems).
+- `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` helps reduce memory fragmentation during long-running jobs.
+- `NCCL_P2P_DISABLE=1` is recommended for single-GPU deployments to avoid unnecessary overhead.
+- `DTYPE=float16` provides the best balance of speed and accuracy for 24GB VRAM GPUs.
 
 ### Additional Configuration Variables
 
@@ -607,7 +676,7 @@ This workflow will:
 - Push the changes and the tag to the repository.
 - **Trigger the Docker publish workflow** automatically as a subsequent step.
 
-### Using local script (Alternative)
+### Using a local script (Alternative)
 
 Alternatively, you can use the `release.sh` script locally:
 

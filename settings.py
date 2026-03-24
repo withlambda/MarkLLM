@@ -28,12 +28,12 @@ class GlobalConfig(BaseSettings):
         vram_gb_total (int): Total VRAM available on GPU (used for auto-tuning worker counts).
         vram_gb_reserve (int): VRAM to reserve for system/other processes.
         vram_gb_per_token_factor (float): VRAM (GB) per token for context calculations.
-        image_description_section_heading (str): Heading for fallback image description section.
-        image_description_heading (str): Marker for beginning of image descriptions.
-        image_description_end (str): Marker for end of image descriptions.
+        image_description_section_heading (str): Heading for a fallback image description section.
+        image_description_heading (str): Marker for the beginning of image descriptions.
+        image_description_end (str): Marker for the end of image descriptions.
         block_correction_prompts_file_name (str): Filename for block correction prompts JSON.
         block_correction_prompts_file_path (Path): Full path to prompts file (auto-computed).
-        block_correction_prompts_library (dict): Loaded prompt templates (auto-loaded from file).
+        block_correction_prompts_library (dict): Loaded prompt templates (autoloaded from a file).
 
     Note:
         Paths with auto-computed defaults use default_factory with validated data (Pydantic 2.10+).
@@ -161,7 +161,7 @@ class MarkerSettings(BaseSettings):
         disable_image_extraction (bool): Do not extract images from documents.
         page_range (str): Specific pages to process (e.g., "1-5,8").
         processors (str): Comma-separated list of marker processors to run.
-        output_format (str): The format of the output (markdown, json, etc.).
+        output_format (str): The format of the output (Markdown, JSON, etc.).
         vram_gb_per_worker (int): The amount of VRAM (in GB) to allocate per worker process.
         debug (bool): Enable debug mode for detailed logging.
         maxtasksperchild (int): Number of tasks each worker handles before recycling.
@@ -179,10 +179,15 @@ class MarkerSettings(BaseSettings):
     output_format: str = Field("markdown", validation_alias="MARKER_OUTPUT_FORMAT")
     vram_gb_per_worker: int = Field(5, validation_alias="MARKER_VRAM_GB_PER_WORKER")
     debug: bool = Field(False, validation_alias="MARKER_DEBUG")
-    # Worker process recycling: Number of tasks each worker handles before being recycled
-    # This helps prevent memory leaks and VRAM accumulation over long-running workers
-    maxtasksperchild: int = Field(10, validation_alias="MARKER_MAXTASKSPERCHILD")
+    disable_maxtasksperchild: bool = Field(False, validation_alias="MARKER_DISABLE_MAXTASKSPERCHILD")
 
+    # Worker process recycling: Number of tasks each worker handles before being recycled
+    # This helps prevent memory leaks and VRAM accumulation over long-running workers.
+    # Disable it by setting disable_maxtasksperchild to True.
+    maxtasksperchild: Optional[int] = Field(
+        default_factory=lambda data: 25 if data["disable_maxtasksperchild"] is False else None,
+        validation_alias="MARKER_MAXTASKSPERCHILD"
+    )
 
 
 class VllmSettings(BaseSettings):
@@ -193,7 +198,7 @@ class VllmSettings(BaseSettings):
     Fields:
         vllm_model_path (DirectoryPath): Path to model weights on disk (required).
         vllm_vram_gb_model (int): VRAM consumed by the model in GB (required).
-        vllm_host (str): The host URL where vLLM server runs.
+        vllm_host (str): The host URL where the vLLM server runs.
         vllm_port (int): Port for the vLLM server.
         vllm_gpu_util (float): Maximum GPU memory fraction for vLLM (0.0–1.0).
         vllm_max_model_len (int): Maximum context/sequence length.
@@ -213,14 +218,14 @@ class VllmSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix='VLLM_', populate_by_name=True, extra='ignore')
 
     # Required fields
-    vllm_model_path: DirectoryPath = Field(..., validation_alias="VLLM_MODEL_PATH")
+    vllm_model_path: Optional[DirectoryPath] = Field(None, validation_alias="VLLM_MODEL_PATH")
     vllm_vram_gb_model: int = Field(..., validation_alias="VLLM_VRAM_GB_MODEL")
 
     # Server configuration
     vllm_host: str = Field("http://127.0.0.1:8000", validation_alias="VLLM_HOST")
     vllm_port: int = Field(8000, validation_alias="VLLM_PORT")
-    vllm_gpu_util: float = Field(0.90, validation_alias="VLLM_GPU_UTIL")
-    vllm_max_model_len: int = Field(16384, validation_alias="VLLM_MAX_MODEL_LEN")
+    vllm_gpu_util: float = Field(0.85, validation_alias="VLLM_GPU_UTIL")
+    vllm_max_model_len: int = Field(8192, validation_alias="VLLM_MAX_MODEL_LEN")
     vllm_max_num_seqs: int = Field(16, validation_alias="VLLM_MAX_NUM_SEQS")
     vllm_startup_timeout: int = Field(120, validation_alias="VLLM_STARTUP_TIMEOUT")
     vllm_vram_recovery_delay: int = Field(10, validation_alias="VLLM_VRAM_RECOVERY_DELAY")
@@ -248,7 +253,7 @@ class VllmSettings(BaseSettings):
         """Initialize VllmSettings with VRAM-based auto-tuning and prompt resolution.
 
         Args:
-            app_config: The global application configuration providing VRAM limits
+            app_config: The global application configuration providing VRAM limits,
                         and the block correction prompts library.
             **kwargs: Additional keyword arguments passed to the BaseSettings constructor.
         """
@@ -259,8 +264,11 @@ class VllmSettings(BaseSettings):
 
         super().__init__(**kwargs)
 
-        # Auto-compute vllm_max_num_seqs from VRAM if not explicitly provided
-        if 'vllm_max_num_seqs' not in kwargs and max_num_seqs_from_env is None:
+        if self.vllm_cpu:
+            self.vllm_max_num_seqs = 1
+
+        # Auto-compute vllm_max_num_seqs from VRAM if not explicitly provided and not on CPU
+        if 'vllm_max_num_seqs' not in kwargs and max_num_seqs_from_env is None and not self.vllm_cpu:
             # Calculate how many parallel sequences fit in remaining VRAM
             # Note: marker models are on CPU during the vLLM processing phase, so we don't subtract them
             available_vram_gb = app_config.vram_gb_total - app_config.vram_gb_reserve - self.vllm_vram_gb_model
@@ -340,8 +348,8 @@ class VllmSettings(BaseSettings):
         Raises:
             ValueError: If the model name cannot be derived from the path.
         """
-        if not self.vllm_model:
-            # Derive model name from the last component of the model path
+        if not self.vllm_model and self.vllm_model_path:
+            # Derive the model name from the last component of the model path
             derived_name = Path(self.vllm_model_path).name
             if derived_name:
                 self.vllm_model = derived_name
@@ -351,4 +359,7 @@ class VllmSettings(BaseSettings):
                     "VLLM_MODEL must be set explicitly or be derivable from VLLM_MODEL_PATH. "
                     "Could not derive a model name from the provided model path."
                 )
+
+        if not self.vllm_model:
+            raise ValueError("VLLM_MODEL must be set explicitly or be derivable from VLLM_MODEL_PATH.")
         return self

@@ -68,7 +68,8 @@ class TestVllmSettingsDefaults(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         """Remove all VLLM_* environment variables to prevent test interference."""
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
@@ -90,13 +91,13 @@ class TestVllmSettingsDefaults(unittest.TestCase):
         """Verify default vllm_gpu_util value."""
         cfg = _make_global_config(self.tmp_dir)
         settings = _make_vllm_settings(cfg, self.model_dir)
-        self.assertAlmostEqual(settings.vllm_gpu_util, 0.90)
+        self.assertAlmostEqual(settings.vllm_gpu_util, 0.85)
 
     def test_default_max_model_len(self):
         """Verify default vllm_max_model_len value."""
         cfg = _make_global_config(self.tmp_dir)
         settings = _make_vllm_settings(cfg, self.model_dir)
-        self.assertEqual(settings.vllm_max_model_len, 16384)
+        self.assertEqual(settings.vllm_max_model_len, 8192)
 
     def test_default_startup_timeout(self):
         """Verify default vllm_startup_timeout value."""
@@ -157,7 +158,8 @@ class TestVllmSettingsGpuUtilValidation(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
                 del os.environ[key]
@@ -208,7 +210,8 @@ class TestVllmSettingsPortValidation(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
                 del os.environ[key]
@@ -265,7 +268,8 @@ class TestVllmSettingsMaxNumSeqsAutoCalc(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
                 del os.environ[key]
@@ -273,10 +277,10 @@ class TestVllmSettingsMaxNumSeqsAutoCalc(unittest.TestCase):
     def test_auto_calc_with_sufficient_vram(self):
         """Auto-calc yields >1 seq when plenty of VRAM is available."""
         # vram_total=24, reserve=4, model=6 => available=14
-        # context_vram = 0.00013 * 16384 ≈ 2.13 => seqs = int(14 / 2.13) = 6
+        # context_vram = 0.00013 * 8192 ≈ 2.13 => seqs = int(14 / 2.13) = 6
         cfg = _make_global_config(self.tmp_dir, VRAM_GB_TOTAL="24", VRAM_GB_RESERVE="4")
         settings = _make_vllm_settings(cfg, self.model_dir, vram_gb_model=6)
-        expected = max(1, int((24 - 4 - 6) // (0.00013 * 16384)))
+        expected = max(1, int((24 - 4 - 6) // (0.00013 * 8192)))
         self.assertEqual(settings.vllm_max_num_seqs, expected)
         self.assertGreater(settings.vllm_max_num_seqs, 1)
 
@@ -315,7 +319,8 @@ class TestVllmSettingsModelNameDerivation(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
                 del os.environ[key]
@@ -351,7 +356,8 @@ class TestVllmSettingsPromptResolution(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
                 del os.environ[key]
@@ -403,7 +409,8 @@ class TestVllmSettingsEnvVarExport(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
                 del os.environ[key]
@@ -411,11 +418,11 @@ class TestVllmSettingsEnvVarExport(unittest.TestCase):
     def test_env_vars_exported_when_not_set(self):
         """Environment variables are exported when they are not already set."""
         cfg = _make_global_config(self.tmp_dir)
-        settings = _make_vllm_settings(cfg, self.model_dir)
+        _make_vllm_settings(cfg, self.model_dir)
         self.assertEqual(os.environ.get("VLLM_HOST"), "http://127.0.0.1:8000")
         self.assertEqual(os.environ.get("VLLM_PORT"), "8000")
         self.assertEqual(os.environ.get("VLLM_GPU_UTIL"), "0.9")
-        self.assertEqual(os.environ.get("VLLM_MAX_MODEL_LEN"), "16384")
+        self.assertEqual(os.environ.get("VLLM_MAX_MODEL_LEN"), "8192")
         self.assertIsNotNone(os.environ.get("VLLM_MAX_NUM_SEQS"))
 
     def test_env_vars_not_overwritten_when_already_set(self):
@@ -440,7 +447,8 @@ class TestVllmSettingsRequiredFields(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def _clear_vllm_env_vars(self):
+    @staticmethod
+    def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("VLLM_"):
                 del os.environ[key]

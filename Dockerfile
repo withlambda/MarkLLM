@@ -26,17 +26,53 @@ FROM ${BASE_IMAGE}
 ARG DOWNLOAD_MARKER_MODELS
 
 # 3. ENVIRONMENT SETTINGS
-# Redirect caches so non-root user can read models downloaded by root
+# -- Redirect caches so non-root user can read models downloaded by root --
+#
+# XDG_CACHE_HOME=/app/cache
+# TORCH_HOME=/app/cache/torch
+#
+# --- Ensure Python always sees the GPU in the same order as the system, to avoid "device not found" errors
+#
+# CUDA_DEVICE_ORDER=PCI_BUS_ID
+#
+# --- Prevent CPU Thread Overload ---
+# --- Keeps the CPU from choking while the GPU does the heavy lifting ---
+#
+# TORCH_NUM_THREADS=1
+# OMP_NUM_THREADS=1
+# MKL_NUM_THREADS=1
+# OPENBLAS_NUM_THREADS=1
+# VECLIB_MAXIMUM_THREADS=1
+# NUMEXPR_NUM_THREADS=1
+#
+# --- Ensure Predictable CPU Performance ---
+#
+# MKL_DYNAMIC=FALSE
+# OMP_DYNAMIC=FALSE
+#
+# --- Fix for Sequential GPU Workflows (Marker -> vLLM) ---
+#
+# PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+#
+# --- vLLM Engine Optimization ---
+#
+# NCCL_P2P_DISABLE=1
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     XDG_CACHE_HOME=/app/cache \
-    TORCH_HOME=/app/cache/torch
-
-# 4. vLLM container-specific defaults (runtime-configurable via docker run -e)
-ENV VLLM_MODEL_PATH=/app/cache/huggingface/hub \
-    VLLM_PORT=8000 \
-    VLLM_GPU_UTIL=0.90 \
-    VLLM_MAX_MODEL_LEN=16384
+    TORCH_HOME=/app/cache/torch \
+    CUDA_DEVICE_ORDER=PCI_BUS_ID \
+    MKL_DYNAMIC=FALSE \
+    TORCH_NUM_THREADS=1 \
+    OMP_DYNAMIC=FALSE \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
+    NCCL_P2P_DISABLE=1
 
 # 5. APPLICATION SETUP
 WORKDIR /app
@@ -52,8 +88,8 @@ RUN mkdir -p ${XDG_CACHE_HOME} && \
     gcc \
     python3-dev \
     gosu \
-    && pip install --no-cache-dir pip \
-    && pip install --no-cache-dir -r requirements.txt --use-deprecated=legacy-resolver \
+    && pip install --no-cache-dir --break-system-packages pip  \
+    && pip install --no-cache-dir --break-system-packages --use-deprecated=legacy-resolver -r requirements.txt \
     && python3 -c "from marker.util import assign_config, download_font; download_font();" \
     && if [ "${DOWNLOAD_MARKER_MODELS}" = "true" ]; then \
     	python3 -c "from marker.models import create_model_dict; create_model_dict()"; \
@@ -64,9 +100,9 @@ RUN mkdir -p ${XDG_CACHE_HOME} && \
 
 COPY *.py block_correction_prompts.json ./
 
-# 8. Create Non-Root User (UID 1000) with the name appuser
+# 8. Create Non-Root User (UID 1001) with the name appuser
 # Ensure appuser owns the app and cache
-RUN	groupadd -r appgroup && useradd -r -g appgroup -u 1000 -m -d /home/appuser appuser && \
+RUN	groupadd -r appgroup && useradd -r -g appgroup -u 1001 -m -d /home/appuser appuser && \
     chown -R appuser:appgroup /app /home/appuser
 
 ENV HANDLER_FILE_NAME="handler.py"

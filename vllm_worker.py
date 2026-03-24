@@ -16,7 +16,7 @@
 """
 vLLM worker for document post-processing.
 This module manages the lifecycle of a vLLM server subprocess, including
-startup with health-check polling, graceful shutdown, and OpenAI-compatible
+startup with health check polling, graceful shutdown, and OpenAI-compatible
 API communication for OCR error correction and image description generation.
 """
 
@@ -33,11 +33,13 @@ from typing import Optional, List, Tuple
 
 import httpx
 import openai
-try:
-    import tiktoken
-    _HAS_TIKTOKEN = True
-except ImportError:
-    _HAS_TIKTOKEN = False
+import tiktoken
+from openai.types.chat import (
+    ChatCompletionUserMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionContentPartImageParam, ChatCompletionContentPartTextParam
+)
+from openai.types.chat.chat_completion_content_part_image_param import ImageURL
 
 from settings import VllmSettings
 
@@ -47,7 +49,7 @@ logger = logging.getLogger(__name__)
 # Default timeout (seconds) for graceful shutdown before SIGKILL
 _SHUTDOWN_GRACE_PERIOD = 10
 
-# Health-check polling interval in seconds
+# Health check polling interval in seconds
 _HEALTH_CHECK_INTERVAL = 2
 
 
@@ -149,6 +151,12 @@ class VllmWorker:
 
         # --- Launch subprocess ---
         env = os.environ.copy()
+
+        # Forces fresh CUDA initialization in the child
+        env["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+        # Critical if Marker used the GPU earlier
+        env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
         if self.settings.vllm_cpu:
             env["VLLM_TARGET_DEVICE"] = "cpu"
 
@@ -158,6 +166,7 @@ class VllmWorker:
             stderr=subprocess.STDOUT,
             text=True,
             env=env,
+            start_new_session=True,
         )
         logger.info(f"vLLM subprocess started (PID {self.process.pid})")
 
@@ -222,7 +231,7 @@ class VllmWorker:
         Chunks the text to stay within the context window and processes chunks
         concurrently using ``asyncio``.
 
-        If *prompt_template* is ``None`` or empty, OCR correction is skipped
+        If *prompt_template* is ``None`` or empty, the OCR correction is skipped
         entirely, and the original text is returned unchanged (a warning is logged).
 
         Args:
@@ -412,7 +421,7 @@ class VllmWorker:
         """
         Process a single text chunk via the OpenAI chat completions API with retry logic.
 
-        On retryable errors (connection, timeout, overloaded, server crash) the method
+        On retryable errors (connection, timeout, overloaded, server crash), the method
         backs off exponentially.  If the vLLM subprocess has died, one restart is
         attempted before giving up.
 
@@ -429,8 +438,8 @@ class VllmWorker:
                 response = await self._client.chat.completions.create(
                     model=self.settings.vllm_model,
                     messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": chunk},
+                        ChatCompletionSystemMessageParam(role="system", content=system_prompt),
+                        ChatCompletionUserMessageParam(role="user", content=chunk),
                     ],
                     max_tokens=self.settings.vllm_max_model_len,
                 )
@@ -445,7 +454,7 @@ class VllmWorker:
                         f"(attempt {attempt + 1}/{self.settings.vllm_max_retries + 1}). "
                         f"Retrying in {delay:.2f}s... Error: {e}"
                     )
-                    # Check if vLLM subprocess crashed and attempt one restart
+                    # Check if the vLLM subprocess crashed and attempt one restart
                     await self._maybe_restart_server()
                     await asyncio.sleep(delay)
                     continue
@@ -454,7 +463,7 @@ class VllmWorker:
                         f"Fatal error processing chunk {chunk_index} "
                         f"after {attempt + 1} attempts: {e}"
                     )
-                    return chunk  # fallback to original
+                    return chunk  # fallback to the original
 
         logger.warning(f"Chunk {chunk_index} processing loop exited unexpectedly. Returning original.")
         return chunk
@@ -484,20 +493,20 @@ class VllmWorker:
         succeeded = 0
         failed = 0
 
-        async def _bounded_describe(idx: int, path: Path) -> Tuple[int, Optional[str]]:
+        async def _bounded_describe(index: int, path: Path) -> Tuple[int, Optional[str]]:
             """
             Describe a single image with semaphore-based concurrency control.
 
             Args:
-                idx: Original index of the image.
+                index: Original index of the image.
                 path: File path to the image.
 
             Returns:
                 Tuple containing the original index and the generated description.
             """
             async with semaphore:
-                result = await self._describe_single_image_async(path, prompt_template, idx)
-                return idx, result
+                result_image_description = await self._describe_single_image_async(path, prompt_template, index)
+                return index, result_image_description
 
         tasks = [_bounded_describe(i, p) for i, p in enumerate(image_paths)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -540,7 +549,7 @@ class VllmWorker:
             image_index: Zero-based image index for logging.
 
         Returns:
-            The description string, or a placeholder string on failure.
+            The description string or a placeholder string on failure.
         """
         if not self.settings.vllm_model:
             raise ValueError("vllm_model not set for image description")
@@ -584,22 +593,20 @@ class VllmWorker:
                 response = await self._client.chat.completions.create(
                     model=self.settings.vllm_model,
                     messages=[
-                        {"role": "system", "content": system_prompt},
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:{mime_type};base64,{b64_image}",
-                                    },
-                                },
-                                {
-                                    "type": "text",
-                                    "text": user_instruction,
-                                },
-                            ],
-                        },
+                        ChatCompletionSystemMessageParam(role="system", content=system_prompt),
+                        ChatCompletionUserMessageParam(
+                            role="user",
+                            content=[
+                                ChatCompletionContentPartImageParam(
+                                    type="image_url",
+                                    image_url=ImageURL(url=f"data:{mime_type};base64,{b64_image}"),
+                                ),
+                                ChatCompletionContentPartTextParam(
+                                    type="text",
+                                    text=user_instruction
+                                )
+                            ]
+                        ),
                     ],
                     max_tokens=1024, # Optimized default for vision tasks
                 )
@@ -688,9 +695,9 @@ class VllmWorker:
         )
 
         while time.time() < deadline:
-            # Check if subprocess has exited
+            # Check if the subprocess has exited
             if self.process is not None and self.process.poll() is not None:
-                returncode = self.process.returncode
+                return_code = self.process.returncode
                 output = ""
                 try:
                     # Capture any remaining output without blocking
@@ -700,7 +707,7 @@ class VllmWorker:
                     pass
                 self._cleanup_process()
                 raise RuntimeError(
-                    f"vLLM server exited prematurely (exit code: {returncode}). Output:\n{output}"
+                    f"vLLM server exited prematurely (exit code: {return_code}). Output:\n{output}"
                 )
 
             try:
@@ -710,7 +717,7 @@ class VllmWorker:
                         logger.info("vLLM health check passed.")
                         return
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.TimeoutException):
-                pass  # Server not ready yet
+                pass  # Server is not ready yet
 
             time.sleep(_HEALTH_CHECK_INTERVAL)
 
@@ -759,7 +766,7 @@ class VllmWorker:
 
     def _cleanup_process(self) -> None:
         """
-        Clean up the subprocess handle and close stdout pipe.
+        Clean up the subprocess handle and close the stdout pipe.
         """
         if self.process is not None:
             try:
@@ -822,10 +829,10 @@ class VllmWorker:
     # ------------------------------------------------------------------
 
 
-    def _count_tokens(self, text: str) -> int:
+    @staticmethod
+    def _count_tokens(text: str) -> int:
         """
-        Count tokens in a string using tiktoken if available,
-        else falls back to a 4-chars-per-token heuristic.
+        Count tokens in a string using tiktoken
 
         Args:
             text: The string to count tokens for.
@@ -833,19 +840,14 @@ class VllmWorker:
         Returns:
             Estimated or actual token count.
         """
-        if _HAS_TIKTOKEN:
-            try:
-                # Use cl100k_base (GPT-4) as a robust proxy for most modern LLMs
-                encoding = tiktoken.get_encoding("cl100k_base")
-                return len(encoding.encode(text, disallowed_special=()))
-            except Exception:
-                pass
-        return len(text) // 4
+        # Use cl100k_base (GPT-4) as a robust proxy for most modern LLMs
+        encoding = tiktoken.get_encoding("cl100k_base")
+        return len(encoding.encode(text, disallowed_special=()))
 
     def _chunk_text(self, text: str, chunk_size: Optional[int] = None) -> List[str]:
         """
         Split Markdown text into chunks of approximately *chunk_size* tokens,
-        preserving Markdown structure.
+        preserving the Markdown structure.
 
         The method avoids splitting in the middle of:
         - Headings (lines starting with ``#``)
@@ -875,7 +877,7 @@ class VllmWorker:
         for block in blocks:
             block_tokens = self._count_tokens(block)
 
-            # If adding this block would exceed the budget, flush the current chunk
+            # If adding this block exceeds the budget, flush the current chunk
             if current_chunk_parts and (current_tokens + block_tokens) > chunk_size:
                 chunks.append("\n\n".join(current_chunk_parts))
                 current_chunk_parts = []
@@ -953,7 +955,7 @@ class VllmWorker:
                 current_block_lines = []
                 in_table = False
 
-            # Blank line outside code/table → block boundary
+            # Blank line outside the code / table → block boundary
             if stripped == "":
                 if current_block_lines:
                     block_text = "\n".join(current_block_lines).strip()
@@ -976,7 +978,7 @@ class VllmWorker:
         """
         Split an oversized block into smaller chunks by line boundaries.
 
-        Used as a fallback when a single logical Markdown block (e.g. a very
+        Used as a fallback when a single logical Markdown block (e.g., a very
         large table or code block) exceeds the character budget.
 
         Args:

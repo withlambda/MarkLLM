@@ -39,15 +39,6 @@ from marker.models import create_model_dict
 from marker.config.parser import ConfigParser
 from marker.output import text_from_rendered
 
-# Ensure threads don't contend - important for multiprocessing
-os.environ["MKL_DYNAMIC"] = "FALSE"
-os.environ["OMP_DYNAMIC"] = "FALSE"
-os.environ["OMP_NUM_THREADS"] = "2"  # Avoid OpenMP issues with multiprocessing
-os.environ["OPENBLAS_NUM_THREADS"] = "2"
-os.environ["MKL_NUM_THREADS"] = "2"
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # Transformers uses .isin for a simple op, which is not supported on MPS
-os.environ["IN_STREAMLIT"] = "true"  # Avoid multiprocessing inside surya
-
 # Set the multiprocessing start method early (required for CUDA)
 try:
     mp.set_start_method("spawn", force=True)
@@ -101,10 +92,21 @@ def marker_worker_exit() -> None:
     """
     global _MARKER_MODELS
     try:
-        if _MARKER_MODELS:
+        if '_MARKER_MODELS' in globals() and _MARKER_MODELS:
+            # 1. Clear the dictionary explicitly
+            _MARKER_MODELS.clear()
             del _MARKER_MODELS
-            torch.cuda.empty_cache()
+
+            # 2. Force Python GC
             gc.collect()
+
+            # 3. Synchronize and clear CUDA
+            if torch.cuda.is_available():
+                torch.cuda.synchronize() # Wait for all kernels to finish
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+
+        logger.info(f"Worker {os.getpid()} cleaned up VRAM.")
     except Exception as e:
         logger.warning(f"Error during worker cleanup: {e}")
 
@@ -343,7 +345,7 @@ def marker_process_single_file(
     """
     global _MARKER_MODELS
     try:
-        logger.info(f"Converting {file_path.name}...")
+        logger.info(f"Converting {file_path.name} in process with pid {os.getpid()} ...")
 
         # Initialize converter using process-local models
         config_parser = ConfigParser(marker_config)
@@ -568,8 +570,13 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         marker_config=marker_settings,
     )
 
+    maxtasksperchild_rendered = marker_settings.maxtasksperchild if marker_settings.maxtasksperchild is not None \
+        else 'unlimited'
+
     # --- Execute Marker Processing ---
-    logger.info(f"Starting conversion for {len(files_to_process)} files...")
+    logger.info(f"Starting conversion for {len(files_to_process)} files "
+                f"with marker using {optimal_marker_workers} workers "
+                f"and {maxtasksperchild_rendered} max tasks per worker...")
     start_time = time.time()
     processed_files = [] # Paths of successfully processed output files
     successful_inputs = [] # Original paths of successfully processed files
@@ -588,7 +595,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             maxtasksperchild=marker_settings.maxtasksperchild  # Recycle workers periodically to free VRAM
         ) as pool:
             # Process files and collect results
-            results = pool.starmap(marker_process_single_file, task_args)
+            results = pool.starmap(marker_process_single_file, task_args, chunksize=1)
 
             # Separate successful results from failed ones
             for idx, (success, output_file_path) in enumerate(results):
@@ -598,6 +605,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
         end_time = time.time()
         logger.info(f"Marker execution took: {end_time - start_time:.2f} seconds")
+        gc.collect()
         torch.cuda.empty_cache()
         log_vram_usage("After Marker")
 
@@ -618,7 +626,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("--- Starting vLLM for Post-processing ---")
 
         try:
-            # Use VllmWorker context manager to start server and wait for readiness
+            # Use VllmWorker context manager to start the server and wait for readiness
             with vllm_worker:
                 logger.info(f"Post-processing {len(processed_files)} files with {vllm_settings.vllm_chunk_workers} chunk workers...")
 
@@ -679,7 +687,7 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "status": "completed" if not failed_post_processing else "partially_completed",
-        "message": f"Processed {len(processed_files)} files.",
+        "message": f"All {len(processed_files)} input files of {input_path.absolute()} were processed successfully.",
         "failures": failed_post_processing if failed_post_processing else None
     }
 

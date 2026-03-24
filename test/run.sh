@@ -108,7 +108,7 @@ docker_run_cmd=()
 
 docker_run_cmd+=("docker run --rm")
 docker_run_cmd+=("--name ${DOCKER_CONTAINER}")
-docker_run_cmd+=("--shm-size=2gb")
+docker_run_cmd+=("--shm-size=4gb")
 docker_run_cmd+=("--env-file custom.env")
 docker_run_cmd+=("--env-file marker.env")
 #docker_run_cmd+=("--env-file surya.env")
