@@ -41,7 +41,7 @@ When LLM post-processing is enabled, the handler spawns a vLLM server subprocess
 *   **vLLM Integration**: Leverages a local vLLM server subprocess for high-performance LLM inference via an OpenAI-compatible API.
 *   **Token Precision**: Integrates `tiktoken` for accurate context window utilization during text chunking.
 *   **Local Model Weights**: Loads models directly from a local directory (`VLLM_MODEL_PATH`), avoiding runtime downloads.
-*   **NVIDIA Optimized**: Uses the official `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime` base image for maximum GPU performance.
+*   **NVIDIA Optimized**: Uses the official `pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime` base image for maximum GPU performance.
 *   **Configurable**: Job inputs can override default environment variables.
 
 ### VRAM Management
