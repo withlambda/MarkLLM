@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Optional, ClassVar, Set
 
-from pydantic import Field, DirectoryPath, field_validator, model_validator
+from pydantic import Field, DirectoryPath, field_validator, model_validator, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class GlobalConfig(BaseSettings):
     )
 
     # memory handling
-    vram_gb_total: int = Field(..., validation_alias="VRAM_GB_TOTAL", frozen=True)
+    vram_gb_total: int = Field(..., validation_alias="MARKLLM_VRAM_GB_TOTAL", frozen=True)
     vram_gb_reserve: int = Field(4, validation_alias="VRAM_GB_RESERVE", frozen=True)
     vram_gb_per_token_factor: float = Field(0.00013, validation_alias="VRAM_GB_PER_TOKEN_FACTOR", frozen=True)
 
@@ -215,35 +215,80 @@ class VllmSettings(BaseSettings):
         vllm_image_description_prompt (str): Custom vision prompt for image descriptions (optional).
         vllm_cpu (bool): Whether to run vLLM on CPU (default: False).
     """
-    model_config = SettingsConfigDict(env_prefix='VLLM_', populate_by_name=True, extra='ignore')
+    model_config = SettingsConfigDict(populate_by_name=True, extra='ignore')
 
     # Required fields
-    vllm_model_path: Optional[DirectoryPath] = Field(None, validation_alias="VLLM_MODEL_PATH")
-    vllm_vram_gb_model: int = Field(..., validation_alias="VLLM_VRAM_GB_MODEL")
+    vllm_model_path: Optional[DirectoryPath] = Field(
+        None,
+        validation_alias="MARKLLM_VLLM_MODEL_PATH"
+    )
+    vllm_vram_gb_model: int = Field(
+        ...,
+        validation_alias="MARKLLM_VLLM_VRAM_GB_MODEL"
+    )
 
     # Server configuration
-    vllm_host: str = Field("http://127.0.0.1:8000", validation_alias="VLLM_HOST")
-    vllm_port: int = Field(8000, validation_alias="VLLM_PORT")
-    vllm_gpu_util: float = Field(0.85, validation_alias="VLLM_GPU_UTIL")
-    vllm_max_model_len: int = Field(8192, validation_alias="VLLM_MAX_MODEL_LEN")
-    vllm_max_num_seqs: int = Field(16, validation_alias="VLLM_MAX_NUM_SEQS")
-    vllm_startup_timeout: int = Field(120, validation_alias="VLLM_STARTUP_TIMEOUT")
-    vllm_vram_recovery_delay: int = Field(10, validation_alias="VLLM_VRAM_RECOVERY_DELAY")
+    vllm_host: str = Field("127.0.0.1", validation_alias="MARKLLM_VLLM_HOST")
+    vllm_port: int = Field(8001, validation_alias="MARKLLM_VLLM_PORT")
+    vllm_gpu_util: float = Field(
+        0.85,
+        validation_alias="MARKLLM_VLLM_GPU_UTIL"
+    )
+    vllm_max_model_len: int = Field(
+        8192,
+        validation_alias="MARKLLM_VLLM_MAX_MODEL_LEN"
+    )
+    vllm_max_num_seqs: int = Field(
+        16,
+        validation_alias="MARKLLM_VLLM_MAX_NUM_SEQS"
+    )
+    vllm_startup_timeout: int = Field(
+        120,
+        validation_alias="MARKLLM_VLLM_STARTUP_TIMEOUT",
+    )
+    vllm_vram_recovery_delay: int = Field(
+        10,
+        validation_alias="MARKLLM_VLLM_VRAM_RECOVERY_DELAY"
+    )
 
     # Model selection
-    vllm_model: Optional[str] = Field(None, validation_alias="VLLM_MODEL")
+    vllm_model: Optional[str] = Field(
+        None,
+        validation_alias="MARKLLM_VLLM_MODEL"
+    )
 
     # Processing configuration
-    vllm_max_retries: int = Field(3, validation_alias="VLLM_MAX_RETRIES")
-    vllm_retry_delay: float = Field(2.0, validation_alias="VLLM_RETRY_DELAY")
-    vllm_chunk_size: int = Field(4000, validation_alias="VLLM_CHUNK_SIZE")
-    vllm_chunk_workers: int = Field(16, validation_alias="VLLM_CHUNK_WORKERS")
+    vllm_max_retries: int = Field(
+        3,
+        validation_alias="MARKLLM_VLLM_MAX_RETRIES"
+    )
+    vllm_retry_delay: float = Field(
+        2.0,
+        validation_alias="MARKLLM_VLLM_RETRY_DELAY"
+    )
+    vllm_chunk_size: int = Field(
+        4000,
+        validation_alias="MARKLLM_VLLM_CHUNK_SIZE"
+    )
+    vllm_chunk_workers: int = Field(
+        16,
+        validation_alias="MARKLLM_VLLM_CHUNK_WORKERS"
+    )
 
     # Prompt configuration
-    vllm_block_correction_prompt_key: Optional[str] = Field(None, validation_alias="VLLM_BLOCK_CORRECTION_PROMPT_KEY")
-    vllm_block_correction_prompt: Optional[str] = Field(None, validation_alias="VLLM_BLOCK_CORRECTION_PROMPT")
-    vllm_image_description_prompt: Optional[str] = Field(None, validation_alias="VLLM_IMAGE_DESCRIPTION_PROMPT")
-    vllm_cpu: bool = Field(False, validation_alias="VLLM_CPU")
+    vllm_block_correction_prompt_key: Optional[str] = Field(
+        None,
+        validation_alias="MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT_KEY"
+    )
+    vllm_block_correction_prompt: Optional[str] = Field(
+        None,
+        validation_alias="MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT"
+    )
+    vllm_image_description_prompt: Optional[str] = Field(
+        None,
+        validation_alias="MARKLLM_VLLM_IMAGE_DESCRIPTION_PROMPT"
+    )
+    vllm_cpu: bool = Field(False, validation_alias="MARKLLM_VLLM_CPU")
 
     def __init__(
         self,
@@ -258,9 +303,8 @@ class VllmSettings(BaseSettings):
             **kwargs: Additional keyword arguments passed to the BaseSettings constructor.
         """
         # Capture env var state before super().__init__(), because model validators
-        # (init_environment_variables) export defaults during construction, which would
-        # make the post-init auto-calc check always see VLLM_MAX_NUM_SEQS as already set.
-        max_num_seqs_from_env = os.environ.get('VLLM_MAX_NUM_SEQS')
+        # make the post-init auto-calc check always see the sequence cap as already set.
+        max_num_seqs_from_env = os.environ.get('MARKLLM_VLLM_MAX_NUM_SEQS')
 
         super().__init__(**kwargs)
 
@@ -316,33 +360,14 @@ class VllmSettings(BaseSettings):
             raise ValueError(f"vllm_port must be between 1 and 65535, got {v}")
         return v
 
-    @model_validator(mode='after')
-    def init_environment_variables(self) -> 'VllmSettings':
-        """
-        Export vLLM configuration fields as environment variables.
-
-        This makes the validated settings available to the vLLM server
-        subprocess and other components that check the environment for
-        configuration.
-        """
-        for (prop, alias) in [
-            (self.vllm_host, "VLLM_HOST"),
-            (self.vllm_port, "VLLM_PORT"),
-            (self.vllm_gpu_util, "VLLM_GPU_UTIL"),
-            (self.vllm_max_model_len, "VLLM_MAX_MODEL_LEN"),
-            (self.vllm_max_num_seqs, "VLLM_MAX_NUM_SEQS"),
-        ]:
-            if prop is not None and os.environ.get(alias) is None:
-                os.environ[alias] = str(prop)
-        return self
 
     @model_validator(mode='after')
     def validate_model_name(self) -> 'VllmSettings':
         """
         Ensure the vLLM model name is set.
 
-        If VLLM_MODEL is not explicitly provided, it is derived from the
-        last component of the VLLM_MODEL_PATH (e.g., /path/to/Llama-3-8B -> Llama-3-8B).
+        If MARKLLM_VLLM_MODEL is not explicitly provided, it is derived from the
+        last component of the MARKLLM_VLLM_MODEL_PATH (e.g., /path/to/Llama-3-8B -> Llama-3-8B).
         This name is required for API calls to the vLLM server.
 
         Raises:
@@ -356,10 +381,10 @@ class VllmSettings(BaseSettings):
                 logger.info(f"Derived vllm_model='{self.vllm_model}' from vllm_model_path")
             else:
                 raise ValueError(
-                    "VLLM_MODEL must be set explicitly or be derivable from VLLM_MODEL_PATH. "
+                    "MARKLLM_VLLM_MODEL must be set explicitly or be derivable from MARKLLM_VLLM_MODEL_PATH. "
                     "Could not derive a model name from the provided model path."
                 )
 
         if not self.vllm_model:
-            raise ValueError("VLLM_MODEL must be set explicitly or be derivable from VLLM_MODEL_PATH.")
+            raise ValueError("MARKLLM_VLLM_MODEL must be set explicitly or be derivable from MARKLLM_VLLM_MODEL_PATH.")
         return self

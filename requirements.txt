@@ -14,6 +14,6 @@ openai>=1.99.1,<2.0.0
 protobuf>=5.0,<7.0
 starlette>=0.30.0,<1.0.0
 filelock>=3.24.2,<4.0.0
-opencv-python-headless==4.11.0.86
-cuda-bindings~=13.2.0
-anthropic>=0.71.0
+opencv-python-headless>=4.13.0
+cuda-bindings==12.9.4
+anthropic>=0.46.0,<0.47.0

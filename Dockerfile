@@ -71,6 +71,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OPENBLAS_NUM_THREADS=1 \
     VECLIB_MAXIMUM_THREADS=1 \
     NUMEXPR_NUM_THREADS=1 \
+    CC=/usr/bin/gcc \
     PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
     NCCL_P2P_DISABLE=1
 
@@ -86,6 +87,7 @@ RUN mkdir -p ${XDG_CACHE_HOME} && \
     curl \
     zstd \
     gcc \
+    g++ \
     python3-dev \
     gosu \
     && pip install --no-cache-dir --break-system-packages pip  \
@@ -95,7 +97,7 @@ RUN mkdir -p ${XDG_CACHE_HOME} && \
     && if [ "${DOWNLOAD_MARKER_MODELS}" = "true" ]; then \
     	python3 -c "from marker.models import create_model_dict; create_model_dict()"; \
     fi \
-    && apt-get purge -y gcc python3-dev \
+    && apt-get purge -y python3-dev \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
