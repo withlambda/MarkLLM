@@ -35,6 +35,8 @@ from typing import Optional, List, Tuple, Callable, Coroutine, Any, TypeVar
 import httpx
 import openai
 import tiktoken
+from langchain_text_splitters import TokenTextSplitter
+
 from openai.types.chat import (
     ChatCompletionUserMessageParam,
     ChatCompletionSystemMessageParam,
@@ -52,6 +54,17 @@ _SHUTDOWN_GRACE_PERIOD = 10
 
 # Health check polling interval in seconds
 _HEALTH_CHECK_INTERVAL = 2
+
+# Reserve context for chat-format overhead and generation stop conditions.
+_CHAT_COMPLETION_TOKEN_SAFETY_MARGIN = 64
+
+# Ensure each chunk leaves at least one token for generation.
+_MIN_COMPLETION_TOKENS = 1
+
+# Token overlap ratio used by langchain-text-splitters for oversized blocks.
+_LANGCHAIN_CHUNK_OVERLAP_RATIO = 0.1
+_LANGCHAIN_MIN_CHUNK_OVERLAP = 32
+_LANGCHAIN_MAX_CHUNK_OVERLAP = 256
 
 _T = TypeVar("_T")
 
@@ -309,7 +322,16 @@ class VllmWorker:
         if not self.settings.vllm_model:
             raise ValueError("vllm_model not set for processing")
 
-        chunks = self._chunk_text(text, self.settings.vllm_chunk_size)
+        effective_chunk_size = self._compute_effective_chunk_size(prompt_template)
+        if effective_chunk_size <= 0:
+            logger.error(
+                "Skipping OCR error correction: prompt token usage leaves no room "
+                "for chunk input/completion (max_model_len=%s). Returning original text.",
+                self.settings.vllm_max_model_len,
+            )
+            return text
+
+        chunks = self._chunk_text(text, effective_chunk_size)
 
         max_workers = max(1, int(max_chunk_workers))
         logger.info(f"Processing {len(chunks)} chunks with vLLM using {max_workers} async workers...")
@@ -485,6 +507,16 @@ class VllmWorker:
         Returns:
             The corrected text, or the original chunk as fallback on failure.
         """
+        max_completion_tokens = self._compute_chunk_completion_tokens(system_prompt, chunk)
+        if max_completion_tokens <= 0:
+            logger.error(
+                "Skipping chunk %s: prompt token usage exceeds context window "
+                "(max_model_len=%s). Returning original chunk.",
+                chunk_index,
+                self.settings.vllm_max_model_len,
+            )
+            return chunk
+
         for attempt in range(self.settings.vllm_max_retries + 1):
             try:
                 response = await self._client.chat.completions.create(
@@ -493,7 +525,7 @@ class VllmWorker:
                         ChatCompletionSystemMessageParam(role="system", content=system_prompt),
                         ChatCompletionUserMessageParam(role="user", content=chunk),
                     ],
-                    max_tokens=self.settings.vllm_max_model_len,
+                    max_tokens=max_completion_tokens,
                 )
                 content = response.choices[0].message.content
                 return content.strip() if content else chunk
@@ -519,6 +551,31 @@ class VllmWorker:
 
         logger.warning(f"Chunk {chunk_index} processing loop exited unexpectedly. Returning original.")
         return chunk
+
+    def _compute_chunk_completion_tokens(self, system_prompt: str, chunk: str) -> int:
+        """Compute a safe completion budget so prompt + output fits model context."""
+        prompt_tokens = self._count_tokens(system_prompt) + self._count_tokens(chunk)
+        available_tokens = (
+            self.settings.vllm_max_model_len
+            - prompt_tokens
+            - _CHAT_COMPLETION_TOKEN_SAFETY_MARGIN
+        )
+        if available_tokens <= 0:
+            return 0
+        return min(self.settings.vllm_max_model_len, available_tokens)
+
+    def _compute_effective_chunk_size(self, system_prompt: str) -> int:
+        """Compute prompt-aware chunk-size budget for `_chunk_text`."""
+        prompt_tokens = self._count_tokens(system_prompt)
+        max_chunk_tokens_from_context = (
+            self.settings.vllm_max_model_len
+            - prompt_tokens
+            - _CHAT_COMPLETION_TOKEN_SAFETY_MARGIN
+            - _MIN_COMPLETION_TOKENS
+        )
+        if max_chunk_tokens_from_context <= 0:
+            return 0
+        return min(self.settings.vllm_chunk_size, max_chunk_tokens_from_context)
 
     async def _describe_images_async(
         self,
@@ -953,14 +1010,14 @@ class VllmWorker:
                 current_chunk_parts = []
                 current_tokens = 0
 
-            # If a single block exceeds the budget, split it by lines as a fallback
+            # If a single block exceeds the budget, split with token overlap via
+            # langchain-text-splitters.
             if block_tokens > chunk_size:
                 if current_chunk_parts:
                     chunks.append("\n\n".join(current_chunk_parts))
                     current_chunk_parts = []
                     current_tokens = 0
-                # Fallback splitting (still uses 4 chars per token approximation for char budget)
-                chunks.extend(self._split_large_block(block, chunk_size * 4))
+                chunks.extend(self._split_large_block_with_overlap(block, chunk_size))
             else:
                 current_chunk_parts.append(block)
                 current_tokens += block_tokens
@@ -970,6 +1027,34 @@ class VllmWorker:
             chunks.append("\n\n".join(current_chunk_parts))
 
         return chunks
+
+    def _split_large_block_with_overlap(self, block: str, chunk_size: int) -> List[str]:
+        """
+        Split an oversized block using langchain token splitters with overlap.
+        """
+        if chunk_size <= 0:
+            return [block]
+
+        overlap = self._compute_large_block_overlap(chunk_size)
+        splitter = TokenTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=overlap,
+            encoding_name="cl100k_base",
+        )
+        split_chunks = [chunk for chunk in splitter.split_text(block) if chunk.strip()]
+        if split_chunks:
+            return split_chunks
+
+        return self._split_large_block(block, chunk_size * 4)
+
+    @staticmethod
+    def _compute_large_block_overlap(chunk_size: int) -> int:
+        """Compute bounded overlap tokens for large-block chunk splitting."""
+        if chunk_size <= 1:
+            return 0
+        overlap = max(_LANGCHAIN_MIN_CHUNK_OVERLAP, int(chunk_size * _LANGCHAIN_CHUNK_OVERLAP_RATIO))
+        overlap = min(overlap, _LANGCHAIN_MAX_CHUNK_OVERLAP)
+        return min(overlap, chunk_size - 1)
 
     @staticmethod
     def _split_into_blocks(text: str) -> List[str]:
