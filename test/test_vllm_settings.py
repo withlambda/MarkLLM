@@ -30,7 +30,7 @@ def _make_global_config(tmp_dir: str, **overrides) -> GlobalConfig:
     """Create a minimal GlobalConfig for testing, using the given tmp_dir as volume root."""
     defaults = {
         "VOLUME_ROOT_MOUNT_PATH": tmp_dir,
-        "VRAM_GB_TOTAL": "24",
+        "MARKLLM_VRAM_GB_TOTAL": "24",
     }
     defaults.update(overrides)
     return GlobalConfig(**defaults)
@@ -45,8 +45,8 @@ def _make_vllm_settings(
     """Create a VllmSettings instance with required fields pre-filled."""
     return VllmSettings(
         app_config=app_config,
-        VLLM_MODEL_PATH=model_path,
-        VLLM_VRAM_GB_MODEL=vram_gb_model,
+        MARKLLM_VLLM_MODEL_PATH=model_path,
+        MARKLLM_VLLM_VRAM_GB_MODEL=vram_gb_model,
         **kwargs,
     )
 
@@ -72,14 +72,14 @@ class TestVllmSettingsDefaults(unittest.TestCase):
     def _clear_vllm_env_vars():
         """Remove all VLLM_* environment variables to prevent test interference."""
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
     def test_default_host(self):
         """Verify default vllm_host value."""
         cfg = _make_global_config(self.tmp_dir)
         settings = _make_vllm_settings(cfg, self.model_dir)
-        self.assertEqual(settings.vllm_host, "http://127.0.0.1:8000")
+        self.assertEqual(settings.vllm_host, "127.0.0.1")
 
     def test_default_port(self):
         """Verify default vllm_port value."""
@@ -161,39 +161,39 @@ class TestVllmSettingsGpuUtilValidation(unittest.TestCase):
     @staticmethod
     def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
     def test_gpu_util_valid_mid_range(self):
         """Accept a valid mid-range gpu_util value."""
         cfg = _make_global_config(self.tmp_dir)
-        settings = _make_vllm_settings(cfg, self.model_dir, VLLM_GPU_UTIL=0.5)
+        settings = _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_GPU_UTIL=0.5)
         self.assertAlmostEqual(settings.vllm_gpu_util, 0.5)
 
     def test_gpu_util_valid_max(self):
         """Accept gpu_util = 1.0 (upper boundary, inclusive)."""
         cfg = _make_global_config(self.tmp_dir)
-        settings = _make_vllm_settings(cfg, self.model_dir, VLLM_GPU_UTIL=1.0)
+        settings = _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_GPU_UTIL=1.0)
         self.assertAlmostEqual(settings.vllm_gpu_util, 1.0)
 
     def test_gpu_util_zero_rejected(self):
         """Reject gpu_util = 0.0 (lower boundary, exclusive)."""
         cfg = _make_global_config(self.tmp_dir)
         with self.assertRaises(ValidationError) as ctx:
-            _make_vllm_settings(cfg, self.model_dir, VLLM_GPU_UTIL=0.0)
+            _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_GPU_UTIL=0.0)
         self.assertIn("vllm_gpu_util", str(ctx.exception))
 
     def test_gpu_util_negative_rejected(self):
         """Reject negative gpu_util values."""
         cfg = _make_global_config(self.tmp_dir)
         with self.assertRaises(ValidationError):
-            _make_vllm_settings(cfg, self.model_dir, VLLM_GPU_UTIL=-0.5)
+            _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_GPU_UTIL=-0.5)
 
     def test_gpu_util_above_one_rejected(self):
         """Reject gpu_util > 1.0."""
         cfg = _make_global_config(self.tmp_dir)
         with self.assertRaises(ValidationError):
-            _make_vllm_settings(cfg, self.model_dir, VLLM_GPU_UTIL=1.5)
+            _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_GPU_UTIL=1.5)
 
 
 class TestVllmSettingsPortValidation(unittest.TestCase):
@@ -213,7 +213,7 @@ class TestVllmSettingsPortValidation(unittest.TestCase):
     @staticmethod
     def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
     def test_port_valid_default(self):
@@ -225,33 +225,33 @@ class TestVllmSettingsPortValidation(unittest.TestCase):
     def test_port_valid_min(self):
         """Accept port = 1 (lower boundary)."""
         cfg = _make_global_config(self.tmp_dir)
-        settings = _make_vllm_settings(cfg, self.model_dir, VLLM_PORT=1)
+        settings = _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_PORT=1)
         self.assertEqual(settings.vllm_port, 1)
 
     def test_port_valid_max(self):
         """Accept port = 65535 (upper boundary)."""
         cfg = _make_global_config(self.tmp_dir)
-        settings = _make_vllm_settings(cfg, self.model_dir, VLLM_PORT=65535)
+        settings = _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_PORT=65535)
         self.assertEqual(settings.vllm_port, 65535)
 
     def test_port_zero_rejected(self):
         """Reject port = 0."""
         cfg = _make_global_config(self.tmp_dir)
         with self.assertRaises(ValidationError) as ctx:
-            _make_vllm_settings(cfg, self.model_dir, VLLM_PORT=0)
+            _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_PORT=0)
         self.assertIn("vllm_port", str(ctx.exception))
 
     def test_port_above_max_rejected(self):
         """Reject port > 65535."""
         cfg = _make_global_config(self.tmp_dir)
         with self.assertRaises(ValidationError):
-            _make_vllm_settings(cfg, self.model_dir, VLLM_PORT=70000)
+            _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_PORT=70000)
 
     def test_port_negative_rejected(self):
         """Reject negative port values."""
         cfg = _make_global_config(self.tmp_dir)
         with self.assertRaises(ValidationError):
-            _make_vllm_settings(cfg, self.model_dir, VLLM_PORT=-1)
+            _make_vllm_settings(cfg, self.model_dir, MARKLLM_VLLM_PORT=-1)
 
 
 class TestVllmSettingsMaxNumSeqsAutoCalc(unittest.TestCase):
@@ -271,14 +271,14 @@ class TestVllmSettingsMaxNumSeqsAutoCalc(unittest.TestCase):
     @staticmethod
     def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
     def test_auto_calc_with_sufficient_vram(self):
         """Auto-calc yields >1 seq when plenty of VRAM is available."""
         # vram_total=24, reserve=4, model=6 => available=14
         # context_vram = 0.00013 * 8192 ≈ 2.13 => seqs = int(14 / 2.13) = 6
-        cfg = _make_global_config(self.tmp_dir, VRAM_GB_TOTAL="24", VRAM_GB_RESERVE="4")
+        cfg = _make_global_config(self.tmp_dir, MARKLLM_VRAM_GB_TOTAL="24", VRAM_GB_RESERVE="4")
         settings = _make_vllm_settings(cfg, self.model_dir, vram_gb_model=6)
         expected = max(1, int((24 - 4 - 6) // (0.00013 * 8192)))
         self.assertEqual(settings.vllm_max_num_seqs, expected)
@@ -287,7 +287,7 @@ class TestVllmSettingsMaxNumSeqsAutoCalc(unittest.TestCase):
     def test_auto_calc_falls_to_one_when_no_vram(self):
         """Auto-calc yields 1 when available VRAM is zero or negative."""
         # vram_total=8, reserve=4, model=6 => available=-2 => 1
-        cfg = _make_global_config(self.tmp_dir, VRAM_GB_TOTAL="8", VRAM_GB_RESERVE="4")
+        cfg = _make_global_config(self.tmp_dir, MARKLLM_VRAM_GB_TOTAL="8", VRAM_GB_RESERVE="4")
         settings = _make_vllm_settings(cfg, self.model_dir, vram_gb_model=6)
         self.assertEqual(settings.vllm_max_num_seqs, 1)
 
@@ -300,8 +300,8 @@ class TestVllmSettingsMaxNumSeqsAutoCalc(unittest.TestCase):
         self.assertEqual(settings.vllm_max_num_seqs, 42)
 
     def test_env_var_max_num_seqs_overrides_auto_calc(self):
-        """Setting VLLM_MAX_NUM_SEQS env var skips auto-calculation."""
-        os.environ["VLLM_MAX_NUM_SEQS"] = "99"
+        """Setting MARKLLM_VLLM_MAX_NUM_SEQS env var skips auto-calculation."""
+        os.environ["MARKLLM_VLLM_MAX_NUM_SEQS"] = "99"
         cfg = _make_global_config(self.tmp_dir)
         settings = _make_vllm_settings(cfg, self.model_dir)
         self.assertEqual(settings.vllm_max_num_seqs, 99)
@@ -322,7 +322,7 @@ class TestVllmSettingsModelNameDerivation(unittest.TestCase):
     @staticmethod
     def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
     def test_model_name_derived_from_path(self):
@@ -338,7 +338,7 @@ class TestVllmSettingsModelNameDerivation(unittest.TestCase):
         model_dir = os.path.join(self.tmp_dir, "some-model")
         os.makedirs(model_dir, exist_ok=True)
         cfg = _make_global_config(self.tmp_dir)
-        settings = _make_vllm_settings(cfg, model_dir, VLLM_MODEL="custom-name")
+        settings = _make_vllm_settings(cfg, model_dir, MARKLLM_VLLM_MODEL="custom-name")
         self.assertEqual(settings.vllm_model, "custom-name")
 
 
@@ -359,7 +359,7 @@ class TestVllmSettingsPromptResolution(unittest.TestCase):
     @staticmethod
     def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
     def test_prompt_resolved_from_library_key(self):
@@ -369,7 +369,7 @@ class TestVllmSettingsPromptResolution(unittest.TestCase):
         object.__setattr__(cfg, 'block_correction_prompts_library', {"default": "Fix OCR errors."})
         settings = _make_vllm_settings(
             cfg, self.model_dir,
-            VLLM_BLOCK_CORRECTION_PROMPT_KEY="default"
+            MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT_KEY="default"
         )
         self.assertEqual(settings.vllm_block_correction_prompt, "Fix OCR errors.")
 
@@ -379,7 +379,7 @@ class TestVllmSettingsPromptResolution(unittest.TestCase):
         object.__setattr__(cfg, 'block_correction_prompts_library', {"default": "Fix OCR errors."})
         settings = _make_vllm_settings(
             cfg, self.model_dir,
-            VLLM_BLOCK_CORRECTION_PROMPT_KEY="nonexistent"
+            MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT_KEY="nonexistent"
         )
         self.assertIsNone(settings.vllm_block_correction_prompt)
 
@@ -389,14 +389,14 @@ class TestVllmSettingsPromptResolution(unittest.TestCase):
         object.__setattr__(cfg, 'block_correction_prompts_library', {"default": "Library prompt."})
         settings = _make_vllm_settings(
             cfg, self.model_dir,
-            VLLM_BLOCK_CORRECTION_PROMPT="Custom prompt override.",
-            VLLM_BLOCK_CORRECTION_PROMPT_KEY="default"
+            MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT="Custom prompt override.",
+            MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT_KEY="default"
         )
         self.assertEqual(settings.vllm_block_correction_prompt, "Custom prompt override.")
 
 
 class TestVllmSettingsEnvVarExport(unittest.TestCase):
-    """Test that VllmSettings exports environment variables correctly."""
+    """Test that VllmSettings does not auto-export unsupported vLLM env vars."""
 
     def setUp(self):
         self.tmp_dir = tempfile.mkdtemp()
@@ -412,25 +412,25 @@ class TestVllmSettingsEnvVarExport(unittest.TestCase):
     @staticmethod
     def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
-    def test_env_vars_exported_when_not_set(self):
-        """Environment variables are exported when they are not already set."""
+    def test_env_vars_not_exported_when_not_set(self):
+        """VllmSettings keeps process env untouched for vLLM/app vLLM settings."""
         cfg = _make_global_config(self.tmp_dir)
         _make_vllm_settings(cfg, self.model_dir)
-        self.assertEqual(os.environ.get("VLLM_HOST"), "http://127.0.0.1:8000")
-        self.assertEqual(os.environ.get("VLLM_PORT"), "8000")
-        self.assertEqual(os.environ.get("VLLM_GPU_UTIL"), "0.9")
-        self.assertEqual(os.environ.get("VLLM_MAX_MODEL_LEN"), "8192")
-        self.assertIsNotNone(os.environ.get("VLLM_MAX_NUM_SEQS"))
+        self.assertIsNone(os.environ.get("MARKLLM_VLLM_HOST"))
+        self.assertIsNone(os.environ.get("MARKLLM_VLLM_PORT"))
+        self.assertIsNone(os.environ.get("MARKLLM_VLLM_GPU_UTIL"))
+        self.assertIsNone(os.environ.get("MARKLLM_VLLM_MAX_MODEL_LEN"))
+        self.assertIsNone(os.environ.get("MARKLLM_VLLM_MAX_NUM_SEQS"))
 
-    def test_env_vars_not_overwritten_when_already_set(self):
-        """Existing environment variables are not overwritten by VllmSettings."""
-        os.environ["VLLM_HOST"] = "http://custom-host:9999"
+    def test_existing_env_vars_are_not_modified(self):
+        """Pre-set env variables remain unchanged by VllmSettings construction."""
+        os.environ["MARKLLM_VLLM_HOST"] = "custom-host"
         cfg = _make_global_config(self.tmp_dir)
         _make_vllm_settings(cfg, self.model_dir)
-        self.assertEqual(os.environ.get("VLLM_HOST"), "http://custom-host:9999")
+        self.assertEqual(os.environ.get("MARKLLM_VLLM_HOST"), "custom-host")
 
 
 class TestVllmSettingsRequiredFields(unittest.TestCase):
@@ -450,15 +450,15 @@ class TestVllmSettingsRequiredFields(unittest.TestCase):
     @staticmethod
     def _clear_vllm_env_vars():
         for key in list(os.environ.keys()):
-            if key.startswith("VLLM_"):
+            if key.startswith("MARKLLM_VLLM_"):
                 del os.environ[key]
 
     def test_missing_vram_gb_model_raises_error(self):
         """VllmSettings requires vllm_vram_gb_model."""
         cfg = _make_global_config(self.tmp_dir)
         with self.assertRaises(ValidationError) as ctx:
-            VllmSettings(app_config=cfg, VLLM_MODEL_PATH=self.model_dir)
-        self.assertIn("VLLM_VRAM_GB_MODEL", str(ctx.exception))
+            VllmSettings(app_config=cfg, MARKLLM_VLLM_MODEL_PATH=self.model_dir)
+        self.assertIn("MARKLLM_VLLM_VRAM_GB_MODEL", str(ctx.exception))
 
     def test_invalid_model_path_raises_error(self):
         """VllmSettings rejects a non-existent directory for vllm_model_path."""
@@ -466,8 +466,8 @@ class TestVllmSettingsRequiredFields(unittest.TestCase):
         with self.assertRaises(ValidationError):
             VllmSettings(
                 app_config=cfg,
-                VLLM_MODEL_PATH="/nonexistent/path/to/model",
-                VLLM_VRAM_GB_MODEL=6,
+                MARKLLM_VLLM_MODEL_PATH="/nonexistent/path/to/model",
+                MARKLLM_VLLM_VRAM_GB_MODEL=6,
             )
 
 

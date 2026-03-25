@@ -250,7 +250,7 @@ class VllmWorker:
         if not prompt_template:
             logger.warning(
                 "No block correction prompt configured — skipping OCR error correction. "
-                "Set VLLM_BLOCK_CORRECTION_PROMPT or VLLM_BLOCK_CORRECTION_PROMPT_KEY to enable."
+                "Set MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT_KEY to enable."
             )
             return text
 
