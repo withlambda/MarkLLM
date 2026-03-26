@@ -85,7 +85,7 @@ class TestVllmSettingsDefaults(unittest.TestCase):
         """Verify default vllm_port value."""
         cfg = _make_global_config(self.tmp_dir)
         settings = _make_vllm_settings(cfg, self.model_dir)
-        self.assertEqual(settings.vllm_port, 8000)
+        self.assertEqual(settings.vllm_port, 8001)
 
     def test_default_gpu_util(self):
         """Verify default vllm_gpu_util value."""
@@ -217,10 +217,10 @@ class TestVllmSettingsPortValidation(unittest.TestCase):
                 del os.environ[key]
 
     def test_port_valid_default(self):
-        """Default port 8000 is valid."""
+        """Default port 8001 is valid."""
         cfg = _make_global_config(self.tmp_dir)
         settings = _make_vllm_settings(cfg, self.model_dir)
-        self.assertEqual(settings.vllm_port, 8000)
+        self.assertEqual(settings.vllm_port, 8001)
 
     def test_port_valid_min(self):
         """Accept port = 1 (lower boundary)."""

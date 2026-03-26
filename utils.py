@@ -26,9 +26,15 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, Union
 
+from langdetect import detect, DetectorFactory
+from langdetect.lang_detect_exception import LangDetectException
+
 from settings import GlobalConfig
 
 logger = logging.getLogger(__name__)
+
+# Set seed for deterministic language detection
+DetectorFactory.seed = 0
 
 def setup_config() -> GlobalConfig:
     """
@@ -223,6 +229,116 @@ def clear_directory(path: Union[str, Path]) -> None:
                 shutil.rmtree(item)
         except Exception as e:
             logger.warning(f"Failed to delete {item} during directory cleanup: {e}")
+
+class LanguageProcessor:
+    """
+    A utility class for language detection and localization.
+    """
+    _LANGUAGE_NAME_MAP = {
+        "en": "English",
+        "de": "German",
+        "fr": "French",
+        "es": "Spanish",
+        "it": "Italian",
+        "pt": "Portuguese",
+        "nl": "Dutch",
+        "pl": "Polish",
+        "cs": "Czech",
+        "ru": "Russian",
+    }
+
+    _LOCALIZED_LABELS = {
+        "en": {
+            "section_heading": "## Extracted Image Descriptions",
+            "begin_marker": "**[BEGIN IMAGE DESCRIPTION]**",
+            "end_marker": "**[END IMAGE DESCRIPTION]**",
+        },
+        "de": {
+            "section_heading": "## Extrahierte Bildbeschreibungen",
+            "begin_marker": "**[BEGINN BILDBESCHREIBUNG]**",
+            "end_marker": "**[ENDE BILDBESCHREIBUNG]**",
+        },
+        "fr": {
+            "section_heading": "## Descriptions d'images extraites",
+            "begin_marker": "**[DÉBUT DESCRIPTION IMAGE]**",
+            "end_marker": "**[FIN DESCRIPTION IMAGE]**",
+        },
+        "es": {
+            "section_heading": "## Descripciones de imágenes",
+            "begin_marker": "**[INICIO DESCRIPCIÓN DE IMAGEN]**",
+            "end_marker": "**[FIN DESCRIPCIÓN DE IMAGEN]**",
+        },
+        "it": {
+            "section_heading": "## Descrizioni delle immagini",
+            "begin_marker": "**[INIZIO DESCRIZIONE IMMAGINE]**",
+            "end_marker": "**[FINE DESCRIZIONE IMMAGINE]**",
+        },
+        "pt": {
+            "section_heading": "## Descrições de imagens extraídas",
+            "begin_marker": "**[INÍCIO DESCRIÇÃO DA IMAGEM]**",
+            "end_marker": "**[FIM DESCRIÇÃO DA IMAGEM]**",
+        },
+        "nl": {
+            "section_heading": "## Geëxtraheerde afbeeldingsbeschrijvingen",
+            "begin_marker": "**[BEGIN AFBEELDINGBESCHRIJVING]**",
+            "end_marker": "**[EINDE AFBEELDINGBESCHRIJVING]**",
+        },
+        "pl": {
+            "section_heading": "## Opisy wyodrębnionych obrazów",
+            "begin_marker": "**[POCZĄTEK OPISU OBRAZU]**",
+            "end_marker": "**[KONIEC OPISU OBRAZU]**",
+        },
+        "cs": {
+            "section_heading": "## Popisy extrahovaných obrázků",
+            "begin_marker": "**[ZAČÁTEK POPISU OBRÁZKU]**",
+            "end_marker": "**[KONEC POPISU OBRÁZKU]**",
+        },
+        "ru": {
+            "section_heading": "## Описания извлечённых изображений",
+            "begin_marker": "**[НАЧАЛО ОПИСАНИЯ ИЗОБРАЖЕНИЯ]**",
+            "end_marker": "**[КОНЕЦ ОПИСАНИЯ ИЗОБРАЖЕНИЯ]**",
+        },
+    }
+
+    @classmethod
+    def infer_output_language(cls, text: str) -> str:
+        """
+        Infers the language of the provided text sample.
+        Uses a sample for performance.
+        Defaults to 'en' if detection fails or signal is weak.
+        """
+        if not text or len(text.strip()) < 50:
+            return "en"
+
+        sample = text[:GlobalConfig.LANGUAGE_DETECTION_SAMPLE_SIZE]
+        try:
+            lang = detect(sample)
+            if lang in cls._LANGUAGE_NAME_MAP:
+                return lang
+        except LangDetectException:
+            logger.debug("Language detection failed; falling back to 'en'.", exc_info=True)
+
+        return "en"
+
+    @classmethod
+    def resolve_language_name(cls, lang_code: str) -> str:
+        """
+        Maps ISO language code to human-readable name.
+        """
+        return cls._LANGUAGE_NAME_MAP.get(lang_code, "English")
+
+    @classmethod
+    def resolve_image_description_labels(cls, lang_code: str, app_config: GlobalConfig) -> Dict[str, str]:
+        """
+        Resolves localized labels for image descriptions based on language code.
+        Falls back to global config defaults (which are English) if no localization is available.
+        """
+        labels = cls._LOCALIZED_LABELS.get(lang_code, {})
+        return {
+            "section_heading": labels.get("section_heading", app_config.image_description_section_heading),
+            "begin_marker": labels.get("begin_marker", app_config.image_description_heading),
+            "end_marker": labels.get("end_marker", app_config.image_description_end),
+        }
 
 class TextProcessor:
     """

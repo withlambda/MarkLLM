@@ -30,6 +30,7 @@ import time
 from pathlib import Path
 from typing import Optional, Any, Dict, Tuple, List
 
+
 import runpod
 import torch
 import torch.multiprocessing as mp
@@ -56,7 +57,8 @@ from utils import (
     check_is_empty_dir,
     clear_directory,
     setup_config,
-    log_vram_usage
+    log_vram_usage,
+    LanguageProcessor
 )
 
 # Configure logging
@@ -67,8 +69,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # Process-local marker models (each worker process has its own copy)
 _MARKER_MODELS: Optional[Dict[str, Any]] = None
+
 
 def marker_worker_init() -> None:
     """
@@ -182,7 +186,10 @@ def list_extracted_images_for_output_file(
 def insert_image_descriptions_to_text_file(
     app_config: GlobalConfig,
     output_file_path: Path,
-    image_descriptions: List[Tuple[Path, str]]
+    image_descriptions: List[Tuple[Path, str]],
+    heading_override: Optional[str] = None,
+    end_override: Optional[str] = None,
+    section_heading_override: Optional[str] = None,
 ) -> bool:
     """
     Inserts generated image descriptions into the converted document.
@@ -203,6 +210,9 @@ def insert_image_descriptions_to_text_file(
         app_config: The global application configuration.
         output_file_path: Path to the main text-based output file.
         image_descriptions: List of (image file path, description text) pairs.
+        heading_override: Optional override for the description start marker.
+        end_override: Optional override for the description end marker.
+        section_heading_override: Optional override for the fallback section heading.
 
     Returns:
         True if the file was modified, False otherwise.
@@ -230,6 +240,11 @@ def insert_image_descriptions_to_text_file(
         logger.warning(f"Cannot insert image descriptions because output file is missing: {output_file_path}")
         return False
 
+    # Use overrides if provided, otherwise fallback to global config defaults
+    image_description_heading = heading_override or app_config.image_description_heading
+    image_description_end = end_override or app_config.image_description_end
+    image_description_section_heading = section_heading_override or app_config.image_description_section_heading
+
     original_text = output_file_path.read_text(encoding=app_config.FILE_ENCODING)
     modified_text = original_text
     unplaced_descriptions = []
@@ -250,9 +265,9 @@ def insert_image_descriptions_to_text_file(
             # We use a blockquote with explicit start/end markers for LLM clarity.
             indented_description = description.replace("\n", "\n> ")
             insertion = (
-                f"\n\n> {app_config.image_description_heading}"
+                f"\n\n> {image_description_heading}"
                 f"\n> {indented_description}"
-                f"\n> {app_config.image_description_end}\n"
+                f"\n> {image_description_end}\n"
             )
 
             modified_text = re.sub(pattern, rf'\g<0>{insertion}', modified_text, count=1)
@@ -261,15 +276,15 @@ def insert_image_descriptions_to_text_file(
 
     # Fallback: append unplaced descriptions at the end
     if unplaced_descriptions:
-        section_lines = ["", app_config.image_description_section_heading, ""]
+        section_lines = ["", image_description_section_heading, ""]
         for image_path, description in unplaced_descriptions:
             section_lines.append(f"### Image: `{image_path.name}`")
             section_lines.append("")
             # Format as blockquote matching inline insertion format
             indented_description = description.replace("\n", "\n> ")
-            section_lines.append(f"> {app_config.image_description_heading}")
+            section_lines.append(f"> {image_description_heading}")
             section_lines.append(f"> {indented_description}")
-            section_lines.append(f"> {app_config.image_description_end}")
+            section_lines.append(f"> {image_description_end}")
             section_lines.append("")
 
         section_text = "\n".join(section_lines).strip()
@@ -642,6 +657,13 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                         failed_post_processing.append(processed_file_path.name)
                         continue
 
+                    # Language Inference for Image Descriptions and Localized Markers
+                    with open(processed_file_path, 'r', encoding=app_config.FILE_ENCODING) as f:
+                        text_sample = f.read(app_config.LANGUAGE_DETECTION_SAMPLE_SIZE)
+                    target_lang_code = LanguageProcessor.infer_output_language(text_sample)
+                    target_lang_name = LanguageProcessor.resolve_language_name(target_lang_code)
+                    logger.info(f"Inferred target language for {processed_file_path.name}: {target_lang_name} ({target_lang_code})")
+
                     extracted_images = list_extracted_images_for_output_file(app_config, processed_file_path)
                     if not extracted_images:
                         continue
@@ -649,13 +671,20 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
                     image_descriptions = vllm_worker.describe_images(
                         image_paths=extracted_images,
                         prompt_template=vllm_settings.vllm_image_description_prompt,
-                        max_image_workers=vllm_settings.vllm_chunk_workers
+                        max_image_workers=vllm_settings.vllm_chunk_workers,
+                        target_language=target_lang_name
                     )
+
+                    # Resolve localized labels for the inferred language
+                    localized_labels = LanguageProcessor.resolve_image_description_labels(target_lang_code, app_config)
 
                     inserted_descriptions = insert_image_descriptions_to_text_file(
                         app_config=app_config,
                         output_file_path=processed_file_path,
-                        image_descriptions=image_descriptions
+                        image_descriptions=image_descriptions,
+                        heading_override=localized_labels["begin_marker"],
+                        end_override=localized_labels["end_marker"],
+                        section_heading_override=localized_labels["section_heading"]
                     )
                     if inserted_descriptions:
                         logger.info(

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import MagicMock
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -21,7 +22,34 @@ def _install_dependency_stubs() -> None:
     runpod_module.serverless = types.SimpleNamespace(start=lambda *_args, **_kwargs: None)
     sys.modules.setdefault("runpod", runpod_module)
 
+    # openai and vllm are needed for vllm_worker import to succeed
+    openai_module = types.ModuleType("openai")
+    openai_module.AsyncOpenAI = MagicMock()
+    sys.modules.setdefault("openai", openai_module)
+
+    openai_types_module = types.ModuleType("openai.types")
+    openai_types_module.__path__ = []
+    sys.modules.setdefault("openai.types", openai_types_module)
+    openai_module.types = openai_types_module
+
+    openai_types_chat_module = types.ModuleType("openai.types.chat")
+    openai_types_chat_module.__path__ = []
+    openai_types_chat_module.ChatCompletionUserMessageParam = dict
+    openai_types_chat_module.ChatCompletionSystemMessageParam = dict
+    openai_types_chat_module.ChatCompletionContentPartImageParam = dict
+    openai_types_chat_module.ChatCompletionContentPartTextParam = dict
+    sys.modules.setdefault("openai.types.chat", openai_types_chat_module)
+    openai_types_module.chat = openai_types_chat_module
+
+    # Some versions of openai import specific params from submodules
+    sys.modules.setdefault("openai.types.chat.chat_completion_content_part_image_param", types.SimpleNamespace(ImageURL=dict))
+    sys.modules.setdefault("openai.types.chat.chat_completion_content_part_text_param", types.SimpleNamespace())
+
+    vllm_module = types.ModuleType("vllm")
+    sys.modules.setdefault("vllm", vllm_module)
+
     torch_module = types.ModuleType("torch")
+    torch_module.__path__ = []
     torch_module.cuda = types.SimpleNamespace(
         empty_cache=lambda: None,
         is_available=lambda: False,
@@ -30,6 +58,10 @@ def _install_dependency_stubs() -> None:
         mem_get_info=lambda *_args, **_kwargs: (0, 0),
     )
     sys.modules.setdefault("torch", torch_module)
+
+    torch_mp_module = types.ModuleType("torch.multiprocessing")
+    torch_mp_module.set_start_method = lambda *_args, **_kwargs: None
+    sys.modules.setdefault("torch.multiprocessing", torch_mp_module)
 
     marker_module = types.ModuleType("marker")
     sys.modules.setdefault("marker", marker_module)
@@ -73,14 +105,6 @@ def _install_dependency_stubs() -> None:
     marker_output_module = types.ModuleType("marker.output")
     marker_output_module.text_from_rendered = lambda *_args, **_kwargs: ("", {}, [])
     sys.modules.setdefault("marker.output", marker_output_module)
-
-    vllm_worker_module = types.ModuleType("vllm_worker")
-
-    class DummyVllmWorker:
-        pass
-
-    vllm_worker_module.VllmWorker = DummyVllmWorker
-    sys.modules.setdefault("vllm_worker", vllm_worker_module)
 
 
 def _import_handler_module():
@@ -198,6 +222,60 @@ class TestHandlerImageDescriptionHelpers(unittest.TestCase):
 
             self.assertFalse(inserted)
             self.assertEqual(output_file.read_text(encoding="utf-8"), original_json)
+
+    def test_insert_image_descriptions_to_text_file_localized(self) -> None:
+        """Should use localized wrappers when provided as overrides."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = Path(temp_dir) / "doc.md"
+            output_file.write_text(
+                "First paragraph.\n\n![img](image_1.png)\n",
+                encoding="utf-8"
+            )
+
+            # German overrides
+            heading_override = "**[BEGINN BILDBESCHREIBUNG]**"
+            end_override = "**[ENDE BILDBESCHREIBUNG]**"
+            section_heading_override = "## Extrahierte Bildbeschreibungen"
+
+            inserted = handler_module.insert_image_descriptions_to_text_file(
+                app_config=self.app_config,
+                output_file_path=output_file,
+                image_descriptions=[
+                    (Path("image_1.png"), "Eine Beschreibung auf Deutsch."),
+                ],
+                heading_override=heading_override,
+                end_override=end_override,
+                section_heading_override=section_heading_override
+            )
+
+            updated_text = output_file.read_text(encoding="utf-8")
+
+            self.assertTrue(inserted)
+            self.assertIn(heading_override, updated_text)
+            self.assertIn(end_override, updated_text)
+            self.assertIn("Eine Beschreibung auf Deutsch.", updated_text)
+
+    def test_insert_image_descriptions_to_text_file_fallback_localized(self) -> None:
+        """Should use localized fallback section heading when provided."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = Path(temp_dir) / "doc.md"
+            output_file.write_text("Text without tags.", encoding="utf-8")
+
+            section_heading_override = "## Extrahierte Bildbeschreibungen"
+
+            inserted = handler_module.insert_image_descriptions_to_text_file(
+                app_config=self.app_config,
+                output_file_path=output_file,
+                image_descriptions=[
+                    (Path("missing.png"), "Beschreibung."),
+                ],
+                section_heading_override=section_heading_override
+            )
+
+            updated_text = output_file.read_text(encoding="utf-8")
+
+            self.assertTrue(inserted)
+            self.assertIn(section_heading_override, updated_text)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ When LLM post-processing is enabled, the handler spawns a vLLM server subprocess
 *   **Serverless Worker**: Fully compatible with RunPod Serverless.
 *   **Multi-Format Support**: Supports `.pdf`, `.pptx`, `.docx`, `.xlsx`, `.html`, and `.epub`.
 *   **vLLM Integration**: Leverages a local vLLM server subprocess for high-performance LLM inference via an OpenAI-compatible API.
+*   **Language-Aware Image Descriptions**: Automatically detects the document language (per-file) and generates image descriptions in that language using localized Markdown wrappers (supports English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Czech, and Russian).
 *   **Token Precision**: Integrates `tiktoken` for accurate context window utilization during text chunking.
 *   **Local Model Weights**: Loads models directly from a local directory (`MARKLLM_VLLM_MODEL_PATH`), avoiding runtime downloads.
 *   **NVIDIA Optimized**: Uses the official `pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime` base image for maximum GPU performance.

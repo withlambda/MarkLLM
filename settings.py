@@ -72,6 +72,7 @@ class GlobalConfig(BaseSettings):
         "chunks": ".txt"
     }
     FILE_ENCODING: ClassVar[str] = "utf-8"
+    LANGUAGE_DETECTION_SAMPLE_SIZE: ClassVar[int] = 2000
     IMAGE_FILE_EXTENSIONS: ClassVar[Set[str]] = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
     # block correction prompt file

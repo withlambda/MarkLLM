@@ -373,6 +373,7 @@ class VllmWorker:
         image_paths: List[Path],
         prompt_template: Optional[str],
         max_image_workers: int,
+        target_language: Optional[str] = None,
     ) -> List[Tuple[Path, str]]:
         """
         Generate descriptions for multiple images via the vision-language model.
@@ -381,6 +382,7 @@ class VllmWorker:
             image_paths: Paths of images to describe.
             prompt_template: Optional custom system prompt for image description.
             max_image_workers: Maximum number of concurrent async tasks.
+            target_language: Optional target language name for descriptions (e.g., "German").
 
         Returns:
             List of (image_path, description) tuples for described images,
@@ -393,7 +395,7 @@ class VllmWorker:
         logger.info(f"Describing {len(image_paths)} extracted images with {max_workers} async worker(s)...")
 
         descriptions: List[Optional[str]] = self._run_async_from_sync(
-            lambda: self._describe_images_async(image_paths, prompt_template, max_workers)
+            lambda: self._describe_images_async(image_paths, prompt_template, max_workers, target_language)
         )
 
         return [
@@ -572,6 +574,7 @@ class VllmWorker:
         image_paths: List[Path],
         prompt_template: Optional[str],
         max_workers: int,
+        target_language: Optional[str] = None,
     ) -> List[Optional[str]]:
         """
         Describe all images concurrently, bounded by *max_workers*.
@@ -583,6 +586,7 @@ class VllmWorker:
             image_paths: Paths of images to describe.
             prompt_template: Optional system prompt override.
             max_workers: Semaphore limit for concurrent API calls.
+            target_language: Optional target language name for descriptions.
 
         Returns:
             List of description strings (including placeholders for failures) in original order.
@@ -604,7 +608,9 @@ class VllmWorker:
                 Tuple containing the original index and the generated description.
             """
             async with semaphore:
-                result_image_description = await self._describe_single_image_async(path, prompt_template, index)
+                result_image_description = await self._describe_single_image_async(
+                    path, prompt_template, index, target_language
+                )
                 return index, result_image_description
 
         tasks = [_bounded_describe(i, p) for i, p in enumerate(image_paths)]
@@ -634,6 +640,7 @@ class VllmWorker:
         image_path: Path,
         prompt_template: Optional[str],
         image_index: int,
+        target_language: Optional[str] = None,
     ) -> Optional[str]:
         """
         Generate a description for a single image using the vision-language model.
@@ -646,6 +653,7 @@ class VllmWorker:
             prompt_template: Optional custom system instruction for the description.
                              If provided, it replaces the default system prompt.
             image_index: Zero-based image index for logging.
+            target_language: Optional target language name for the description.
 
         Returns:
             The description string or a placeholder string on failure.
@@ -658,6 +666,9 @@ class VllmWorker:
             "of any diagrams, charts, or illustrations. If it is a photo, describe the "
             "subject and context. Output only the description text."
         )
+
+        if target_language:
+            system_prompt = f"{system_prompt.rstrip()} Respond in {target_language}."
 
         # Keep request-level user instruction short; avoid repeating template text
         # when it is already provided as the system prompt.
