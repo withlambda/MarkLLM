@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock, patch, ANY
 from pathlib import Path
 import sys
-import types
 
 # Mock dependencies
 MOCK_MODULES = {
@@ -18,7 +17,7 @@ MOCK_MODULES = {
     "marker.output": MagicMock(),
 }
 sys.modules.update(MOCK_MODULES)
-import handler
+__import__("handler")
 
 class TestHandlerEndToEndLanguage(unittest.TestCase):
     def setUp(self):

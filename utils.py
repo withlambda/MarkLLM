@@ -24,7 +24,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Union, List, Optional, Tuple
+from typing import Any, Dict, Union
 
 from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
@@ -316,7 +316,7 @@ class LanguageProcessor:
             if lang in cls._LANGUAGE_NAME_MAP:
                 return lang
         except LangDetectException:
-            pass
+            logger.debug("Language detection failed; falling back to 'en'.", exc_info=True)
 
         return "en"
 
