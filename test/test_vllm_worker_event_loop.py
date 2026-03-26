@@ -59,7 +59,7 @@ class TestVllmWorkerEventLoopBridge(unittest.IsolatedAsyncioTestCase):
         worker = _make_worker()
         image_paths = [Path("/tmp/a.png"), Path("/tmp/b.png")]
 
-        async def fake_describe(_paths, _prompt, _max_workers):
+        async def fake_describe(_paths, _prompt, _max_workers, *args, **kwargs):
             return ["desc-a", None]
 
         with patch.object(worker, "_describe_images_async", side_effect=fake_describe):
