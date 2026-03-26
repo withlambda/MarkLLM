@@ -23,6 +23,7 @@ def _make_worker(chunk_size: int = 100) -> VllmWorker:
         vllm_langchain_chunk_overlap_ratio=0.1,
         vllm_langchain_min_chunk_overlap=32,
         vllm_langchain_max_chunk_overlap=256,
+        vllm_tiktoken_encoding_name="gpt2",
     )
     return VllmWorker(settings=settings)
 
@@ -51,7 +52,7 @@ class TestVllmWorkerChunking(unittest.TestCase):
             chunks = worker._chunk_text("ignored", chunk_size=100)
 
         self.assertEqual(chunks, ["small", "large-part-1", "large-part-2"])
-        self.assertEqual(splitter_inits, [(100, 32, "cl100k_base")])
+        self.assertEqual(splitter_inits, [(100, 32, "gpt2")])
 
     def test_split_large_block_raises_when_splitter_fails(self):
         """Errors from token splitter must propagate for required dependencies."""

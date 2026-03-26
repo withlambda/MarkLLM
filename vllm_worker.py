@@ -306,7 +306,7 @@ class VllmWorker:
         if not self.settings.vllm_model:
             raise ValueError("vllm_model not set for processing")
 
-        effective_chunk_size = self._compute_effective_chunk_size(prompt_template, r=1.0)
+        effective_chunk_size: int = self._compute_effective_chunk_size(prompt_template, r=1.0)
         if effective_chunk_size <= 0:
             logger.error(
                 "Skipping OCR error correction: prompt token usage leaves no room "
@@ -978,8 +978,7 @@ class VllmWorker:
     # ------------------------------------------------------------------
 
 
-    @staticmethod
-    def _count_tokens(text: str) -> int:
+    def _count_tokens(self, text: str) -> int:
         """
         Count tokens in a string using tiktoken
 
@@ -989,11 +988,13 @@ class VllmWorker:
         Returns:
             Estimated or actual token count.
         """
-        # Use cl100k_base (GPT-4) as a robust proxy for most modern LLMs
-        encoding = tiktoken.get_encoding("cl100k_base")
+        # Use a configurable proxy for modern LLMs (larger token counts by default)
+        # to avoid context overflow with models that have less efficient tokenizers or different
+        # vocabularies (like Qwen).
+        encoding = tiktoken.get_encoding(self.settings.vllm_tiktoken_encoding_name)
         return len(encoding.encode(text, disallowed_special=()))
 
-    def _chunk_text(self, text: str, chunk_size: Optional[int] = None) -> List[str]:
+    def _chunk_text(self, text: str, chunk_size: int) -> List[str]:
         """
         Split Markdown text into chunks of approximately *chunk_size* tokens,
         preserving the Markdown structure.
@@ -1007,14 +1008,11 @@ class VllmWorker:
 
         Args:
             text: The Markdown text to split.
-            chunk_size: Maximum *tokens* per chunk.  Defaults to
-                ``self.settings.vllm_chunk_size``.
+            chunk_size: Maximum *tokens* per chunk.
 
         Returns:
             List of text chunks.
         """
-        if chunk_size is None:
-            chunk_size = self.settings.vllm_chunk_size
 
         # Split text into logical blocks separated by blank lines
         blocks = self._split_into_blocks(text)
@@ -1061,7 +1059,7 @@ class VllmWorker:
         splitter = TokenTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=overlap,
-            encoding_name="cl100k_base",
+            encoding_name=self.settings.vllm_tiktoken_encoding_name,
         )
         split_chunks = [chunk for chunk in splitter.split_text(block) if chunk.strip()]
         if split_chunks:

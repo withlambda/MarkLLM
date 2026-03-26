@@ -292,8 +292,12 @@ class VllmSettings(BaseSettings):
         validation_alias="MARKLLM_VLLM_HEALTH_CHECK_INTERVAL"
     )
     vllm_chat_completion_token_safety_margin: int = Field(
-        64,
+        128,
         validation_alias="MARKLLM_VLLM_CHAT_COMPLETION_TOKEN_SAFETY_MARGIN"
+    )
+    vllm_tiktoken_encoding_name: str = Field(
+        "gpt2",
+        validation_alias="MARKLLM_VLLM_TIKTOKEN_ENCODING_NAME"
     )
     vllm_min_completion_tokens: int = Field(
         1,
