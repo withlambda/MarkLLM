@@ -1,6 +1,6 @@
 # Design: language-aware-image-descriptions
 
-## High-Level Architecture and Data Flow
+## High-level architecture/data flow
 
 1. **Current flow (relevant segment)**
    - `handler.py` runs marker conversion, optional OCR correction (`process_file`), then optional image description (`describe_images`), and finally inserts wrappers via `insert_image_descriptions_to_text_file(...)`.
@@ -19,7 +19,7 @@
    - resolved language -> `insert_image_descriptions_to_text_file(..., localization=...)`
    - localized wrappers + generated text -> updated markdown/txt output
 
-## Planned File-Level Changes
+## List of new/modified files
 
 1. **`handler.py`**
    - Add helper(s) for language inference and normalization:
@@ -58,7 +58,7 @@
      - prompt includes explicit language instruction,
      - localized wrapper insertion in both inline and fallback-append paths.
 
-## API / Schema / Dependency Impact
+## API/schema/dependency changes
 
 1. **Public behavior impact**
    - No breaking change required: new language parameters are optional.
