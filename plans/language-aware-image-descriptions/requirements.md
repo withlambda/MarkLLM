@@ -1,6 +1,6 @@
 # Feature: language-aware-image-descriptions
 
-## Functional Requirements
+## Functional requirements
 
 1. **Language inference before image description (FR-1)**
    - For each successfully converted output file, the pipeline MUST infer a target language from the text content before calling image-description generation.
@@ -28,7 +28,7 @@
    - Non-text outputs (`json`, `html`) MUST continue to skip insertion of markdown-style image descriptions.
    - The existing OCR block correction flow MUST remain unaffected.
 
-## Non-Functional Requirements
+## Non-functional requirements
 
 1. **Deterministic behavior (NFR-1)**
    - Given the same file text and configuration, the inferred language and resulting prompt language MUST be stable across runs.
@@ -44,7 +44,7 @@
 4. **Token-budget awareness (NFR-4)**
    - Adding language guidance to prompts MUST preserve existing token-budget safeguards for image descriptions.
 
-## Edge Cases and Pitfalls
+## Edge cases/pitfalls
 
 1. Very short text, numeric-only text, or symbol-heavy text may not provide reliable language signals.
 2. OCR noise can bias language detection; fallback must remain robust.
@@ -53,7 +53,7 @@
 5. Language labels used in prompts (e.g., `de`, `German`) must be normalized to a model-friendly form.
 6. Existing static English markers in global config require a localization strategy that does not break environment-variable overrides.
 
-## Definition of Done
+## Definition of Done (measurable success criteria)
 
 1. Language is inferred per processed file before image description generation and passed to vLLM image-description APIs.
 2. Prompt payloads used for image description include an explicit target-language instruction.
