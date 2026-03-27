@@ -226,6 +226,7 @@ class VllmSettings(BaseSettings):
         vllm_temperature_text_chunk_correction (float): Temperature for text chunk correction.
         vllm_temperature_image_description (float): Temperature for image description generation.
         vllm_chunk_output_formatting_instruction (str): Formatting instruction for chunked output.
+        vllm_chunk_user_prompt_init (str): Initial prompt for chunked processing.
         vllm_image_description_output_formatting_instruction (str): Formatting instruction for image description output.
         vllm_output_json_schema (dict): JSON schema for the output format.
     """
@@ -341,6 +342,11 @@ class VllmSettings(BaseSettings):
     vllm_chunk_output_formatting_instruction: str = Field(
         default_factory=lambda : VllmSettings.output_formatting_instruction_template("The corrected Markdown text goes here"),
         validation_alias="MARKLLM_VLLM_CHUNK_OUTPUT_FORMATTING_INSTRUCTION"
+    )
+
+    vllm_chunk_user_prompt_init: str = Field(
+        "### TEXT TO PROCESS:\n",
+        validation_alias="MARKLLM_VLLM_CHUNK_USER_PROMPT_INIT"
     )
 
     vllm_image_description_output_formatting_instruction: str = Field(

@@ -507,7 +507,7 @@ class VllmWorker:
             The corrected text, or the original chunk as fallback on failure.
         """
 
-        user_prompt: str = f"### TEXT TO PROCESS:\n{chunk}"
+        user_prompt: str = f"{self.settings.vllm_chunk_user_prompt_init}{chunk}"
 
         max_completion_tokens = self._compute_max_completion_tokens(
             self._count_tokens(system_prompt, user_prompt)
@@ -591,7 +591,7 @@ class VllmWorker:
             raise ValueError("Output-to-input token ratio 'r' must be non-negative.")
 
         system_prompt_tokens = self._count_tokens(system_prompt)
-        user_prompt_introduction = self._count_tokens("### TEXT TO PROCESS:\n")
+        user_prompt_introduction = self._count_tokens(self.settings.vllm_chunk_user_prompt_init)
         context_budget = (
             self.settings.vllm_max_model_len
             - system_prompt_tokens
