@@ -82,7 +82,7 @@ class VllmWorker:
         self._client: Optional[openai.AsyncOpenAI] = None
         self._restart_attempted: bool = False
 
-        self.image_token_caculator = ImageTokenCalculator(
+        self.image_token_calculator = ImageTokenCalculator(
             model_path=self.settings.vllm_model_path,
             model_name=self.settings.vllm_model
         )
@@ -737,7 +737,7 @@ class VllmWorker:
 
         prompt_tokens = self._count_tokens(system_prompt, user_instruction)
 
-        image_tokens = self.image_token_caculator.calculate_image_tokens(image_source=image_path)
+        image_tokens = self.image_token_calculator.calculate_image_tokens(image_source=image_path)
 
         max_completion_tokens = self._compute_max_completion_tokens(
             prompt_tokens, image_tokens,
