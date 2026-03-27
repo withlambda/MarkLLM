@@ -345,7 +345,7 @@ class VllmSettings(BaseSettings):
 
     vllm_image_description_output_formatting_instruction: str = Field(
         default_factory=lambda : VllmSettings.output_formatting_instruction_template("The image description text goes here"),
-        validation_alias="MARKLLM_VLLM_CHUNK_OUTPUT_FORMATTING_INSTRUCTION"
+        validation_alias="MARKLLM_VLLM_IMAGE_DESCRIPTION_OUTPUT_FORMATTING_INSTRUCTION"
     )
 
     vllm_output_json_schema: dict[str, Any] = Field(

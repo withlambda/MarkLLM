@@ -558,8 +558,8 @@ class VllmWorker:
                 else:
                     logger.error(
                         f"Fatal error processing chunk {chunk_index} after {attempt + 1} attempts "
-                        f"(${len(chunk)} chunk size, {len(system_prompt)} prompt size, {max_completion_tokens} "
-                        f"max completion_tokens, {len(chunk)+len(system_prompt)+max_completion_tokens} sum,"
+                        f"({len(chunk)} chunk size, {len(system_prompt)} prompt size, {max_completion_tokens} "
+                        f"max completion_tokens, {len(chunk)+len(system_prompt)+max_completion_tokens} sum, "
                         f"{self.settings.vllm_max_model_len} allowed total): {e}"
                     )
                     return chunk  # fallback to the original
@@ -1044,12 +1044,15 @@ class VllmWorker:
 
     def _count_tokens(self, *texts: str) -> int:
         """
-        Counts the total number of tokens in the provided text inputs using a specified
-        token encoding.
+        Count the total number of tokens in the provided text inputs.
 
-        :param texts: One or more strings whose tokens need to be counted.
-        :return: The total number of tokens in all provided texts.
-        :rtype: int
+        Uses the tiktoken encoding configured in ``vllm_tiktoken_encoding_name``.
+
+        Args:
+            *texts: One or more strings whose tokens need to be counted.
+
+        Returns:
+            The total number of tokens across all provided texts.
         """
         encoding = tiktoken.get_encoding(self.settings.vllm_tiktoken_encoding_name)
         return sum(
