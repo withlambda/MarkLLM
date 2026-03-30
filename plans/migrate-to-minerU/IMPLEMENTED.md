@@ -48,6 +48,16 @@ The following issues were identified and fixed during the post-implementation re
 - **Fix**: Switched the project to `mineru[pipeline]==3.0.1`, added explicit dependency verification for `shapely`, and updated `release.sh` to keep the correct dependency line in sync for future releases.
 - **Files**: `requirements.txt`, `check_dependencies.py`, `release.sh`
 
+### 7. Added Support for Missing MinerU Settings
+- **Issue**: `page_range` and `disable_image_extraction` settings were defined in `MinerUSettings` but were not being passed to the `do_parse` function in `handler.py`.
+- **Fix**: Added `_parse_mineru_page_range` helper to handle page range parsing (0-indexed per MinerU API) and updated `mineru_process_single_file` to pass `start_page_id` and `end_page_id`. Implemented `disable_image_extraction` by conditionally removing the `images` subfolder during normalization.
+- **Files**: `handler.py`
+
+### 8. Fixed Inconsistent Setting Names in Documentation
+- **Issue**: `README.md` used `mineru_force_ocr` while the implementation used `mineru_ocr_mode`.
+- **Fix**: Updated `README.md` to use `mineru_ocr_mode` and documented the new MinerU-specific fields.
+- **Files**: `README.md`
+
 ## Test Results
 
 Verification was completed during this review pass with the following steps:

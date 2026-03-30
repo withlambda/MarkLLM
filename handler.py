@@ -31,6 +31,7 @@ from typing import Optional, Any, Dict, Tuple, List
 
 
 import runpod
+import shutil
 import torch
 import torch.multiprocessing as mp
 import paddle
@@ -314,6 +315,28 @@ def insert_image_descriptions_to_text_file(
 
     return False
 
+def _parse_mineru_page_range(page_range: Optional[str]) -> Tuple[int, Optional[int]]:
+    """
+    Parses a page range string into start_page_id and end_page_id.
+    MinerU uses 0-indexed page IDs.
+    Supports formats: "0-5", "5" (single page).
+    """
+    if not page_range:
+        return 0, None
+    try:
+        if "-" in page_range:
+            parts = page_range.split("-")
+            start = int(parts[0])
+            end = int(parts[1])
+            return start, end
+        else:
+            page = int(page_range)
+            return page, page
+    except (ValueError, IndexError):
+        logger.warning(f"Invalid MinerU page range format: '{page_range}'. Processing entire file.")
+        return 0, None
+
+
 def mineru_process_single_file(
     app_config: GlobalConfig,
     file_path: Path,
@@ -346,8 +369,13 @@ def mineru_process_single_file(
 
         pdf_bytes = file_path.read_bytes()
 
-        # Extract OCR mode from config
+        # Extract configurations from config dict
         ocr_mode = mineru_config_dict.get("ocr_mode", "auto")
+        page_range = mineru_config_dict.get("page_range")
+        disable_images = mineru_config_dict.get("disable_image_extraction", False)
+
+        start_page, end_page = _parse_mineru_page_range(page_range)
+
         do_parse(
             output_dir=str(out_folder),
             pdf_file_names=[file_stem],
@@ -363,6 +391,8 @@ def mineru_process_single_file(
             f_dump_orig_pdf=False,
             f_dump_content_list=False,
             f_make_md_mode=MakeMode.MM_MD,
+            start_page_id=start_page,
+            end_page_id=end_page,
         )
 
         # --- Normalize Output ---
@@ -390,17 +420,21 @@ def mineru_process_single_file(
             target_images = out_folder / "images"
 
             if source_images.exists() and source_images.is_dir():
-                # If target_images already exists, we might need to move contents instead of renaming folder
-                if target_images.exists():
-                    for img_file in source_images.iterdir():
-                        if img_file.is_file():
-                             img_file.replace(target_images / img_file.name)
-                    try:
-                        source_images.rmdir()
-                    except OSError:
-                        pass # Non-empty or other issue
+                if disable_images:
+                    # If image extraction is disabled, remove the images
+                    shutil.rmtree(source_images)
                 else:
-                    source_images.rename(target_images)
+                    # If target_images already exists, we might need to move contents instead of renaming folder
+                    if target_images.exists():
+                        for img_file in source_images.iterdir():
+                            if img_file.is_file():
+                                 img_file.replace(target_images / img_file.name)
+                        try:
+                            source_images.rmdir()
+                        except OSError:
+                            pass # Non-empty or other issue
+                    else:
+                        source_images.rename(target_images)
 
             # Cleanup empty subfolders created by MinerU
             # Iterate through the parents of source_md until we reach out_folder

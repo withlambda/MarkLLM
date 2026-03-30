@@ -48,6 +48,15 @@ class TestMinerUSettingsExtraction(unittest.TestCase):
         # Verify it's not on the object
         self.assertFalse(hasattr(settings, "unknown_field"))
 
+    def test_extract_mineru_specific_fields(self):
+        job_input = {
+            "mineru_page_range": "1-5",
+            "mineru_disable_image_extraction": True
+        }
+        settings = extract_mineru_settings_from_job_input(job_input)
+        self.assertEqual(settings.page_range, "1-5")
+        self.assertTrue(settings.disable_image_extraction)
+
     def test_extract_mixed_input(self):
         job_input = {
             "mineru_workers": 2,

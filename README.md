@@ -137,8 +137,9 @@ You can trigger the worker with a JSON payload. `input_dir` and `output_dir` are
     "output_dir": "output",
     "output_format": "markdown",
     "mineru_workers": 2,
-    "mineru_force_ocr": false,
+    "mineru_ocr_mode": "ocr",
     "mineru_page_range": "0-10",
+    "mineru_disable_image_extraction": false,
     "delete_input_on_success": false,
     "vllm_block_correction_prompt": "Optional custom prompt",
     "vllm_chunk_workers": 2,
@@ -170,9 +171,10 @@ The following `mineru_`-prefixed keys can be used in the `input` section of the 
 | Key                               | Description                                                     | Default    |
 |:----------------------------------|:----------------------------------------------------------------|:-----------|
 | `mineru_workers`                  | Number of documents to process in parallel.                     | `auto`     |
-| `mineru_force_ocr`                | Force OCR even if text is present.                              | `false`    |
-| `mineru_page_range`               | Page range to convert (e.g., "0,5-10").                         | `None`     |
-| `mineru_output_format`            | The format of the output (markdown, json, etc.).                | `markdown` |
+| `mineru_ocr_mode`                 | OCR mode for PDF parsing (`auto`, `txt`, `ocr`).                | `auto`     |
+| `mineru_page_range`               | Page range to convert (e.g., "0-10").                           | `None`     |
+| `mineru_disable_image_extraction` | Disable image extraction and removal of `images` subfolder.     | `false`    |
+| `mineru_output_format`            | The format of the output (always `markdown`).                   | `markdown` |
 | `mineru_maxtasksperchild`         | Tasks per worker before recycling (prevents memory leaks).      | `25`       |
 | `mineru_disable_maxtasksperchild` | Disable automatic recycling of tasks for the child process.     | `false`    |
 

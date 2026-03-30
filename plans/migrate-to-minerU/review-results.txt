@@ -31,16 +31,16 @@ Checking vLLM entrypoint imports ('python3 -c "import vllm.entrypoints.openai.ap
 platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
 rootdir: /workspace
 plugins: anyio-4.13.0, langsmith-0.7.22
-collected 78 items
+collected 79 items
 
 test/test_handler_end_to_end_language.py .                               [  1%]
 test/test_handler_image_description_helpers.py .......                   [ 10%]
 test/test_handler_language_inference.py ........                         [ 20%]
-test/test_handler_settings_extraction.py ....                            [ 25%]
-test/test_regression_mineru.py ..                                        [ 28%]
-test/test_settings.py ......                                             [ 35%]
+test/test_handler_settings_extraction.py .....                           [ 26%]
+test/test_regression_mineru.py ..                                        [ 29%]
+test/test_settings.py ......                                             [ 36%]
 test/test_vllm_settings.py .....................................         [ 83%]
-test/test_vllm_worker_chunking.py ..                                     [ 85%]
+test/test_vllm_worker_chunking.py ..                                     [ 86%]
 test/test_vllm_worker_event_loop.py ..                                   [ 88%]
 test/test_vllm_worker_language_aware.py ..                               [ 91%]
 test/test_vllm_worker_token_budget.py .......                            [100%]
@@ -51,6 +51,6 @@ test/test_vllm_worker_token_budget.py .......                            [100%]
     warnings.warn(warning_message)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================== 78 passed, 1 warning in 23.34s ========================
+======================== 79 passed, 1 warning in 13.25s ========================
 
 === Review verification completed ===
