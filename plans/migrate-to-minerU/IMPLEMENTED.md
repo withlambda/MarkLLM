@@ -72,7 +72,7 @@ Verification was completed during this review pass with the following steps:
    - Command: `docker run --rm -v "$PWD":/workspace -w /workspace -e RESULTS_FILE=/workspace/plans/migrate-to-minerU/review-results.txt markllm-mineru-review-overlay sh /workspace/plans/migrate-to-minerU/review-tests.sh`
    - Result:
      - `check_dependencies.py` passed, including `mineru`, `paddle`, `shapely`, and the vLLM entrypoint import check.
-     - Full relevant pytest suite passed: `78 passed`.
+     - Full relevant pytest suite passed: `79 passed`.
 
 3. **Conclusion**
    - The review fixes applied in this pass are verified in a real Linux dependency environment, and the migration now matches the implemented/tested MinerU 3.0.1 pipeline behavior.
