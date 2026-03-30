@@ -88,11 +88,12 @@ Registered skills:
 2. `/review-plan <feature-name>` → `.junie/skills/review-plan/SKILL.md`
 3. `/execute-task <plan>/<task>` → `.junie/skills/execute-task/SKILL.md`
 4. `/execute-plan <feature-name>` → `.junie/skills/execute-plan/SKILL.md`
-5. `/review-code` → `.junie/skills/review-code/SKILL.md`
-6. `/add-src-docs` → `.junie/skills/add-src-docs/SKILL.md`
-7. `/update-src-docs` → `.junie/skills/update-src-docs/SKILL.md`
-8. `/update-readme` → `.junie/skills/update-readme/SKILL.md`
-9. `/review-all` → `.junie/skills/review-all/SKILL.md`
+5. `/review-plan-implementation <plan>` → `.junie/skills/review-plan-implementation/SKILL.md`
+6. `/review-code` → `.junie/skills/review-code/SKILL.md`
+7. `/add-src-docs` → `.junie/skills/add-src-docs/SKILL.md`
+8. `/update-src-docs` → `.junie/skills/update-src-docs/SKILL.md`
+9. `/update-readme` → `.junie/skills/update-readme/SKILL.md`
+10. `/review-all` → `.junie/skills/review-all/SKILL.md`
 
 **Key principle for `/review-all`**: It is a review-and-implement workflow, not review-only. Identified improvements must be applied directly.
 
