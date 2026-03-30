@@ -68,6 +68,7 @@ def main():
         "requests",
         "mineru",
         "paddle",
+        "shapely",
         "runpod",
         "openai",
         "httpx",

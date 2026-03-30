@@ -108,14 +108,14 @@ else
 fi
 
 # Update requirements.txt
-# Assuming mineru[full] is the library we want to sync with
+# Sync the MinerU pipeline dependency used by the project runtime.
 if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] Update requirements.txt to mineru[full]==$NEW_VERSION"
+    echo "[DRY RUN] Update requirements.txt to mineru[pipeline]==$NEW_VERSION"
 else
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/mineru\[full\]==.*/mineru\[full\]==$NEW_VERSION/" requirements.txt
+        sed -i '' "s/mineru\[pipeline\]==.*/mineru\[pipeline\]==$NEW_VERSION/" requirements.txt
     else
-        sed -i "s/mineru\[full\]==.*/mineru\[full\]==$NEW_VERSION/" requirements.txt
+        sed -i "s/mineru\[pipeline\]==.*/mineru\[pipeline\]==$NEW_VERSION/" requirements.txt
     fi
 fi
 

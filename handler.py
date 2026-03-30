@@ -21,7 +21,6 @@ optional post-processing using a vLLM-powered LLM server.
 
 import atexit
 import gc
-import json
 import logging
 import os
 import re
@@ -34,14 +33,9 @@ from typing import Optional, Any, Dict, Tuple, List
 import runpod
 import torch
 import torch.multiprocessing as mp
+import paddle
 
-from mineru.data.data_reader_writer import FileBasedDataWriter, FileBasedDataReader
-from mineru.data.dataset import PymuDocDataset
-from mineru.model.doc_analyze_by_custom_model import doc_analyze
-try:
-    import paddle
-except ImportError:
-    paddle = None
+from mineru.cli.common import MakeMode, do_parse
 
 # Set the multiprocessing start method early (required for CUDA)
 try:
@@ -126,7 +120,7 @@ def mineru_worker_exit() -> None:
 
         logger.info(f"Worker {os.getpid()} cleaned up VRAM.")
     except Exception as e:
-        logger.warning(f"Error during worker cleanup: {e}")
+        logger.warning(f"Error during worker cleanup for pid {os.getpid()}: {e}", exc_info=True)
 
 def calculate_optimal_mineru_workers(
     num_files: int,
@@ -350,30 +344,26 @@ def mineru_process_single_file(
         out_folder = Path(output_base_path) / file_stem
         out_folder.mkdir(parents=True, exist_ok=True)
 
-        # Initialize MinerU components
-        # Note: DataReader/Writer expect strings in some MinerU versions
-        reader = FileBasedDataReader("")
-        writer = FileBasedDataWriter(str(out_folder))
-
-        pdf_bytes = reader.read(str(file_path))
-        dataset = PymuDocDataset(pdf_bytes)
+        pdf_bytes = file_path.read_bytes()
 
         # Extract OCR mode from config
         ocr_mode = mineru_config_dict.get("ocr_mode", "auto")
-        is_ocr_enabled = (ocr_mode != "txt")
-
-        # Layout analysis and OCR
-        infer_result = dataset.apply(doc_analyze, ocr=is_ocr_enabled)
-
-        # Pipeline execution
-        if ocr_mode == "txt":
-            pipe_result = infer_result.pipe_txt_mode(writer)
-        else:
-            pipe_result = infer_result.pipe_ocr_mode(writer)
-
-        # Generate Markdown content and trigger side-effect file writing
-        # MinerU 3.0.1 writes images and markdown to the writer's directory
-        pipe_result.get_markdown(writer)
+        do_parse(
+            output_dir=str(out_folder),
+            pdf_file_names=[file_stem],
+            pdf_bytes_list=[pdf_bytes],
+            p_lang_list=[""],
+            backend="pipeline",
+            parse_method=ocr_mode,
+            f_draw_layout_bbox=False,
+            f_draw_span_bbox=False,
+            f_dump_md=True,
+            f_dump_middle_json=False,
+            f_dump_model_output=False,
+            f_dump_orig_pdf=False,
+            f_dump_content_list=False,
+            f_make_md_mode=MakeMode.MM_MD,
+        )
 
         # --- Normalize Output ---
         # MinerU often creates a subfolder named after the stem inside our out_folder

@@ -1,6 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
-import os
+from unittest.mock import patch
 import sys
 from pathlib import Path
 
@@ -9,20 +8,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Mock dependencies before importing handler
-with patch.dict(sys.modules, {
-    "runpod": MagicMock(),
-    "torch": MagicMock(),
-    "torch.multiprocessing": MagicMock(),
-    "mineru": MagicMock(),
-    "mineru.data": MagicMock(),
-    "mineru.data.data_reader_writer": MagicMock(),
-    "mineru.data.dataset": MagicMock(),
-    "mineru.model": MagicMock(),
-    "mineru.model.doc_analyze_by_custom_model": MagicMock(),
-}):
-    from handler import extract_mineru_settings_from_job_input
-    from settings import MinerUSettings
+# Tests rely on real project dependencies; `conftest.py` intentionally avoids shims.
+from handler import extract_mineru_settings_from_job_input
+from settings import MinerUSettings
 
 class TestMinerUSettingsExtraction(unittest.TestCase):
     def test_extract_valid_overrides(self):
