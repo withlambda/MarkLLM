@@ -28,7 +28,7 @@ set -e
 #
 # Configuration:
 #   - DOCKER_FILE_NAME: The Dockerfile to use (huggingface-hub.dockerfile).
-#   - MODELS_FILES: A comma-separated list of files containing model IDs (mineru-models.txt, vllm-models.txt).
+#   - MODELS_FILES: A comma-separated list of files containing model IDs vllm-models.txt.
 #   - ENV_FILE_PATH: Optional path to an environment file (e.g., for HF_TOKEN).
 #
 # Output:
@@ -38,7 +38,7 @@ SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
 DOCKER_FILE_NAME="huggingface-hub.dockerfile"
 DOCKER_IMAGE_NAME="hf_hub"
 # Files with models to download, comma separated
-MODELS_FILES="mineru-models.txt,vllm-models.txt"
+MODELS_FILES="vllm-models.txt"
 ENV_FILE_PATH="${SCRIPT_DIR}/.private.env"
 
 ENV_FILE_ARG=""
