@@ -21,7 +21,7 @@
 This is the largest documentation change. Perform a systematic replacement:
 
 **Title and Introduction**:
-- `# MarkLLM - Marker-PDF + vLLM` → `# MarkLLM - MinerU + vLLM`
+- `# NoteLM - Marker-PDF + vLLM` → `# NoteLM - MinerU + vLLM`
 - Update the subtitle and project description to reference MinerU instead of marker-pdf.
 
 **Architecture Section**:

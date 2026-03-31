@@ -17,11 +17,11 @@
 
 ### 0. Verify MinerU API Surface (Pre-Implementation Spike)
 
-To avoid repeated multi-GB downloads, perform this verification inside the `markllm-mineru-test` image created in Task 01:
+To avoid repeated multi-GB downloads, perform this verification inside the `notelm-mineru-test` image created in Task 01:
 
 1. **Start the test container in interactive mode or with a script**:
    ```bash
-   docker run --rm -it markllm-mineru-test python3
+   docker run --rm -it notelm-mineru-test python3
    ```
 2. **Confirm the exact API of `mineru[full]==3.0.1`** by running a minimal test script or inspecting its source inside the container.
 3. **Verify that the following imports and method calls exist** and behave as documented in `design.md`:
@@ -175,6 +175,6 @@ This is a **critical integration point** — a mismatch here silently breaks the
 - Unit test: `mineru_process_single_file()` produces a `.md` file and images in the expected directory structure (with real dependencies installed; use behavior-level patches only where needed).
 - Unit test: `calculate_optimal_mineru_workers()` returns correct values for various VRAM/file-count combinations (reuse existing test logic with renamed function).
 - Unit test: `extract_mineru_settings_from_job_input()` correctly parses `mineru_*` prefixed keys.
-- Integration test: The full `handler()` flow processes a PDF through MinerU and produces output compatible with vLLM post-processing. Use the `markllm-mineru-test` image from Task 01 with a mounted volume and a shell script to run the test and record results.
+- Integration test: The full `handler()` flow processes a PDF through MinerU and produces output compatible with vLLM post-processing. Use the `notelm-mineru-test` image from Task 01 with a mounted volume and a shell script to run the test and record results.
 - Integration regression: run a fixed two-column PDF fixture and assert expected reading-order anchors in produced Markdown.
 - Contract regression: validate that MinerU-style Markdown image links are discoverable by `list_extracted_images_for_output_file()` and correctly consumed by `insert_image_descriptions_to_text_file()`.

@@ -64,12 +64,12 @@ Verification was completed during this review pass with the following steps:
 
 1. **Reusable Linux review image**
    - Commands:
-     - `docker build -f plans/migrate-to-minerU/review-test.Dockerfile -t markllm-mineru-review .`
-     - `docker build -f plans/migrate-to-minerU/review-test-overlay.Dockerfile -t markllm-mineru-review-overlay .`
+     - `docker build -f plans/migrate-to-minerU/review-test.Dockerfile -t notelm-mineru-review .`
+     - `docker build -f plans/migrate-to-minerU/review-test-overlay.Dockerfile -t notelm-mineru-review-overlay .`
    - Result: Built a reusable review environment plus a lightweight overlay image that adds the missing MinerU pipeline extras required by the current review.
 
 2. **Grouped in-container verification**
-   - Command: `docker run --rm -v "$PWD":/workspace -w /workspace -e RESULTS_FILE=/workspace/plans/migrate-to-minerU/review-results.txt markllm-mineru-review-overlay sh /workspace/plans/migrate-to-minerU/review-tests.sh`
+   - Command: `docker run --rm -v "$PWD":/workspace -w /workspace -e RESULTS_FILE=/workspace/plans/migrate-to-minerU/review-results.txt notelm-mineru-review-overlay sh /workspace/plans/migrate-to-minerU/review-tests.sh`
    - Result:
      - `check_dependencies.py` passed, including `mineru`, `paddle`, `shapely`, and the vLLM entrypoint import check.
      - Full relevant pytest suite passed: `79 passed`.

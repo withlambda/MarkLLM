@@ -1,4 +1,4 @@
-FROM markllm-mineru-review
+FROM notelm-mineru-review
 
 RUN python -m pip install \
     'shapely>=2.0.7,<3.0.0' \

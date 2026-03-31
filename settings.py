@@ -238,123 +238,123 @@ class VllmSettings(BaseSettings):
     # Required fields
     vllm_model_path: Optional[DirectoryPath] = Field(
         None,
-        validation_alias="MARKLLM_VLLM_MODEL_PATH"
+        validation_alias="NOTELM_VLLM_MODEL_PATH"
     )
     vllm_vram_gb_model: int = Field(
         ...,
-        validation_alias="MARKLLM_VLLM_VRAM_GB_MODEL"
+        validation_alias="NOTELM_VLLM_VRAM_GB_MODEL"
     )
 
     # Server configuration
-    vllm_host: str = Field("127.0.0.1", validation_alias="MARKLLM_VLLM_HOST")
-    vllm_port: int = Field(8001, validation_alias="MARKLLM_VLLM_PORT")
+    vllm_host: str = Field("127.0.0.1", validation_alias="NOTELM_VLLM_HOST")
+    vllm_port: int = Field(8001, validation_alias="NOTELM_VLLM_PORT")
     vllm_gpu_util: float = Field(
         0.85,
-        validation_alias="MARKLLM_VLLM_GPU_UTIL"
+        validation_alias="NOTELM_VLLM_GPU_UTIL"
     )
     vllm_max_model_len: int = Field(
         16384,
-        validation_alias="MARKLLM_VLLM_MAX_MODEL_LEN"
+        validation_alias="NOTELM_VLLM_MAX_MODEL_LEN"
     )
     vllm_max_num_seqs: int = Field(
         16,
-        validation_alias="MARKLLM_VLLM_MAX_NUM_SEQS"
+        validation_alias="NOTELM_VLLM_MAX_NUM_SEQS"
     )
     vllm_startup_timeout: int = Field(
         120,
-        validation_alias="MARKLLM_VLLM_STARTUP_TIMEOUT",
+        validation_alias="NOTELM_VLLM_STARTUP_TIMEOUT",
     )
     vllm_vram_recovery_delay: int = Field(
         10,
-        validation_alias="MARKLLM_VLLM_VRAM_RECOVERY_DELAY"
+        validation_alias="NOTELM_VLLM_VRAM_RECOVERY_DELAY"
     )
 
     # Model selection
     vllm_model: Optional[str] = Field(
         None,
-        validation_alias="MARKLLM_VLLM_MODEL"
+        validation_alias="NOTELM_VLLM_MODEL"
     )
 
     # Processing configuration
     vllm_max_retries: int = Field(
         3,
-        validation_alias="MARKLLM_VLLM_MAX_RETRIES"
+        validation_alias="NOTELM_VLLM_MAX_RETRIES"
     )
     vllm_retry_delay: float = Field(
         2.0,
-        validation_alias="MARKLLM_VLLM_RETRY_DELAY"
+        validation_alias="NOTELM_VLLM_RETRY_DELAY"
     )
     vllm_chunk_size: int = Field(
         default_factory=lambda data: data["vllm_max_model_len"] // 2,
-        validation_alias="MARKLLM_VLLM_CHUNK_SIZE"
+        validation_alias="NOTELM_VLLM_CHUNK_SIZE"
     )
     vllm_chunk_workers: int = Field(
         16,
-        validation_alias="MARKLLM_VLLM_CHUNK_WORKERS"
+        validation_alias="NOTELM_VLLM_CHUNK_WORKERS"
     )
     vllm_shutdown_grace_period: int = Field(
         10,
-        validation_alias="MARKLLM_VLLM_SHUTDOWN_GRACE_PERIOD"
+        validation_alias="NOTELM_VLLM_SHUTDOWN_GRACE_PERIOD"
     )
     vllm_health_check_interval: float = Field(
         2.0,
-        validation_alias="MARKLLM_VLLM_HEALTH_CHECK_INTERVAL"
+        validation_alias="NOTELM_VLLM_HEALTH_CHECK_INTERVAL"
     )
     vllm_chat_completion_token_safety_margin: int = Field(
         50,
-        validation_alias="MARKLLM_VLLM_CHAT_COMPLETION_TOKEN_SAFETY_MARGIN"
+        validation_alias="NOTELM_VLLM_CHAT_COMPLETION_TOKEN_SAFETY_MARGIN"
     )
     vllm_tiktoken_encoding_name: str = Field(
         "gpt2",
-        validation_alias="MARKLLM_VLLM_TIKTOKEN_ENCODING_NAME"
+        validation_alias="NOTELM_VLLM_TIKTOKEN_ENCODING_NAME"
     )
     vllm_min_completion_tokens: int = Field(
         1,
-        validation_alias="MARKLLM_VLLM_MIN_COMPLETION_TOKENS"
+        validation_alias="NOTELM_VLLM_MIN_COMPLETION_TOKENS"
     )
     vllm_image_description_max_tokens: int = Field(
         1024,
-        validation_alias="MARKLLM_VLLM_IMAGE_DESCRIPTION_MAX_TOKENS"
+        validation_alias="NOTELM_VLLM_IMAGE_DESCRIPTION_MAX_TOKENS"
     )
 
     # Prompt configuration
     vllm_block_correction_prompt_key: Optional[str] = Field(
         None,
-        validation_alias="MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT_KEY"
+        validation_alias="NOTELM_VLLM_BLOCK_CORRECTION_PROMPT_KEY"
     )
     vllm_block_correction_prompt: Optional[str] = Field(
         None,
-        validation_alias="MARKLLM_VLLM_BLOCK_CORRECTION_PROMPT"
+        validation_alias="NOTELM_VLLM_BLOCK_CORRECTION_PROMPT"
     )
     vllm_image_description_prompt: Optional[str] = Field(
         None,
-        validation_alias="MARKLLM_VLLM_IMAGE_DESCRIPTION_PROMPT"
+        validation_alias="NOTELM_VLLM_IMAGE_DESCRIPTION_PROMPT"
     )
-    vllm_cpu: bool = Field(False, validation_alias="MARKLLM_VLLM_CPU")
+    vllm_cpu: bool = Field(False, validation_alias="NOTELM_VLLM_CPU")
 
     # Force temperature to 0 for deterministic OCR correction
     vllm_temperature_text_chunk_correction: float = Field(
-        0.0, validation_alias="MARKLLM_VLLM_TEMPERATURE_TEXT_CHUNK_CORRECTION"
+        0.0, validation_alias="NOTELM_VLLM_TEMPERATURE_TEXT_CHUNK_CORRECTION"
     )
 
     # Force temperature to 0 for deterministic image description generation
     vllm_temperature_image_description: float = Field(
-        0.0, validation_alias="MARKLLM_VLLM_TEMPERATURE_IMAGE_DESCRIPTION"
+        0.0, validation_alias="NOTELM_VLLM_TEMPERATURE_IMAGE_DESCRIPTION"
     )
 
     vllm_chunk_output_formatting_instruction: str = Field(
         default_factory=lambda : VllmSettings.output_formatting_instruction_template("The corrected Markdown text goes here"),
-        validation_alias="MARKLLM_VLLM_CHUNK_OUTPUT_FORMATTING_INSTRUCTION"
+        validation_alias="NOTELM_VLLM_CHUNK_OUTPUT_FORMATTING_INSTRUCTION"
     )
 
     vllm_chunk_user_prompt_init: str = Field(
         "### TEXT TO PROCESS:\n",
-        validation_alias="MARKLLM_VLLM_CHUNK_USER_PROMPT_INIT"
+        validation_alias="NOTELM_VLLM_CHUNK_USER_PROMPT_INIT"
     )
 
     vllm_image_description_output_formatting_instruction: str = Field(
         default_factory=lambda : VllmSettings.output_formatting_instruction_template("The image description text goes here"),
-        validation_alias="MARKLLM_VLLM_IMAGE_DESCRIPTION_OUTPUT_FORMATTING_INSTRUCTION"
+        validation_alias="NOTELM_VLLM_IMAGE_DESCRIPTION_OUTPUT_FORMATTING_INSTRUCTION"
     )
 
     vllm_chunk_structural_markdown_instructions: str = Field(
@@ -366,7 +366,7 @@ class VllmSettings(BaseSettings):
                 - Keep image syntax like ![](_page_1_Picture_5.jpeg) exactly as is.
             - Hyphenation: Merge words split by line-break hyphens unless the hyphen is part of the archaic compound style.
         """,
-        validation_alias="MARKLLM_VLLM_CHUNK_STRUCTURAL_MARKDOWN_INSTRUCTIONS"
+        validation_alias="NOTELM_VLLM_CHUNK_STRUCTURAL_MARKDOWN_INSTRUCTIONS"
     )
 
 
@@ -378,7 +378,7 @@ class VllmSettings(BaseSettings):
             },
             "required": ["text"]
         },
-        validation_alias="MARKLLM_VLLM_OUTPUT_JSON_SCHEMA"
+        validation_alias="NOTELM_VLLM_OUTPUT_JSON_SCHEMA"
     )
 
     def __init__(
@@ -395,7 +395,7 @@ class VllmSettings(BaseSettings):
         """
         # Capture env var state before super().__init__(), because model validators
         # make the post-init auto-calc check always see the sequence cap as already set.
-        max_num_seqs_from_env = os.environ.get('MARKLLM_VLLM_MAX_NUM_SEQS')
+        max_num_seqs_from_env = os.environ.get('NOTELM_VLLM_MAX_NUM_SEQS')
 
         super().__init__(**kwargs)
 
@@ -475,8 +475,8 @@ class VllmSettings(BaseSettings):
         """
         Ensure the vLLM model name is set.
 
-        If MARKLLM_VLLM_MODEL is not explicitly provided, it is derived from the
-        last component of the MARKLLM_VLLM_MODEL_PATH (e.g., /path/to/Llama-3-8B -> Llama-3-8B).
+        If NOTELM_VLLM_MODEL is not explicitly provided, it is derived from the
+        last component of the NOTELM_VLLM_MODEL_PATH (e.g., /path/to/Llama-3-8B -> Llama-3-8B).
         This name is required for API calls to the vLLM server.
 
         Raises:
@@ -490,10 +490,10 @@ class VllmSettings(BaseSettings):
                 logger.info(f"Derived vllm_model='{self.vllm_model}' from vllm_model_path")
             else:
                 raise ValueError(
-                    "MARKLLM_VLLM_MODEL must be set explicitly or be derivable from MARKLLM_VLLM_MODEL_PATH. "
+                    "NOTELM_VLLM_MODEL must be set explicitly or be derivable from NOTELM_VLLM_MODEL_PATH. "
                     "Could not derive a model name from the provided model path."
                 )
 
         if not self.vllm_model:
-            raise ValueError("MARKLLM_VLLM_MODEL must be set explicitly or be derivable from MARKLLM_VLLM_MODEL_PATH.")
+            raise ValueError("NOTELM_VLLM_MODEL must be set explicitly or be derivable from NOTELM_VLLM_MODEL_PATH.")
         return self

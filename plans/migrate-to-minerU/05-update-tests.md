@@ -43,9 +43,9 @@ To prevent multiple multi-GB downloads during test preparation:
     python -m pip install -r test/requirements-setup.txt
   fi
   ```
-- **Prefer running tests inside the `markllm-mineru-test` container** built in Task 01:
+- **Prefer running tests inside the `notelm-mineru-test` container** built in Task 01:
   - This image already contains all heavy dependencies (`mineru[full]==3.0.1`, `paddlepaddle-gpu==3.3.0`, `vllm==0.18.0`).
-  - Use `docker run --rm -v $(pwd):/app markllm-mineru-test python -m pytest test/ -v` to run the full suite.
+  - Use `docker run --rm -v $(pwd):/app notelm-mineru-test python -m pytest test/ -v` to run the full suite.
 - Do not use dummy `sys.modules` shims for required third-party packages (`mineru`, `paddle`).
 
 ### 1. Update `test/test-handler.py`
@@ -126,7 +126,7 @@ Run targeted migration-related tests first, then execute the full test suite.
 docker run --rm \
   -v $(pwd):/app \
   -v $(pwd)/test/mineru.env:/app/mineru.env \
-  markllm-mineru-test python3 -m pytest test/ -v
+  notelm-mineru-test python3 -m pytest test/ -v
 ```
 
 **Option B: On the host (Only if dependencies were prepared in Step 0)**:

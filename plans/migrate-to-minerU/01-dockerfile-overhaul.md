@@ -42,7 +42,7 @@ To avoid repeated multi-GB downloads during verification, perform the compatibil
      docker run --rm \
        -v $(pwd)/test_all.sh:/test_all.sh \
        -v $(pwd)/test_results.txt:/test_results.txt \
-       markllm-mineru-test bash /test_all.sh
+       notelm-mineru-test bash /test_all.sh
      ```
    - The `test_all.sh` script must append all command outputs and results to `/test_results.txt`.
 
@@ -105,7 +105,7 @@ Do **not** bake production Dockerfile assumptions until this proof step is compl
 
 ## Test Requirements
 - The compatibility proof (Step 0) is recorded in `test_results.txt` via the temporary test container and matches the final implementation choices.
-- The production Dockerfile must build successfully (`docker build -t markllm-mineru .`).
+- The production Dockerfile must build successfully (`docker build -t notelm-mineru .`).
 - `check_dependencies.py` must pass inside the built container (after Task 04 updates it).
 - `python3 -c "import mineru; print(mineru.__version__)"` must succeed inside the container.
 - `python3 -c "import paddle; print(paddle.__version__)"` must succeed inside the container.
